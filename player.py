@@ -11,7 +11,7 @@ import subprocess
 import time
 import json
 
-ext_dict = {'mp4':'video/mp4', 'webm':'video/webm'}
+ext_dict = {'mp4':'video/mp4', 'mkv':'video/mp4', 'webm':'video/webm'}
 
 class ChromecastPlayer(Gtk.Application):
 
@@ -29,6 +29,11 @@ class ChromecastPlayer(Gtk.Application):
         self.uri_ext = None
         self.uri_working = False
         self.stop_worker = False
+        self.is_playing = False
+        self.is_paused = False
+        self.is_idle = False
+        self.is_disconnected = False
+        self.seeking = False
     
     def exit(self, *args):
         self.win.close()
@@ -91,9 +96,10 @@ class ChromecastPlayer(Gtk.Application):
         self.progressbar.set_margin_left(6)
         self.progressbar.set_margin_right(6)
         self.progressbar.set_draw_value(False)
-        self.progressbar.set_range(0, 100)
-        self.progressbar.set_increments(1, 10)
-        self.label = Gtk.Label(label='0:00/0:00')
+        self.progressbar.set_range(0, 1)
+        self.progressbar.connect("value_changed", self.slider_changed)
+    
+        self.label = Gtk.Label(label='00:00/00:00')
         self.label.set_margin_left(6)
         self.label.set_margin_right(6)
         
@@ -128,9 +134,9 @@ class ChromecastPlayer(Gtk.Application):
         load.add(loadButtonImage)
         load.connect("clicked", self.load_uri)
 
-        disconnect = Gtk.Button()
-        disconnect.add(disconnectButtonImage)
-        disconnect.connect("clicked", self.disconnect_chromecasts)
+        self.disconnect = Gtk.Button()
+        self.disconnect.add(disconnectButtonImage)
+        self.disconnect.connect("clicked", self.disconnect_chromecasts)
         
         close = Gtk.Button("_Close", use_underline=True)
         close.get_style_context().add_class("destructive-action")
@@ -139,7 +145,7 @@ class ChromecastPlayer(Gtk.Application):
         hboxclient.pack_start(load, True, False, 2)
         hboxclient.pack_start(self.clients_combo, True, False, 2)
         hboxclient.pack_start(refresh, True, False, 2)
-        hboxclient.pack_start(disconnect, True, False, 2)
+        hboxclient.pack_start(self.disconnect, True, False, 2)
         
         hboxprogress.pack_start(self.progressbar, True, True, 0)
         hboxprogress.pack_end(self.label, False, False, 0)
@@ -155,7 +161,7 @@ class ChromecastPlayer(Gtk.Application):
         hboxbuttons.set_margin_left(10)
         hboxbuttons.set_margin_right(10)
         
-        hboxclose.pack_start(self.volume, False, False, 30)
+        hboxclose.pack_start(self.volume, False, False, 3)
         hboxclose.pack_end(close, False, False, 30)
         vboxall.set_margin_top(10)
         vboxall.pack_start(hboxprogress, True, False, 0)
@@ -185,6 +191,7 @@ class ChromecastPlayer(Gtk.Application):
         menu_bar = Gtk.MenuBar()
         menu_bar.append(root_menu)
 
+        self.win.connect("delete-event", self.exit) 
         vboxall.pack_start(menu_bar, False, False, 2)
         self._worker_thread()
         GLib.timeout_add(100,self._worker_thread)
@@ -228,6 +235,7 @@ class ChromecastPlayer(Gtk.Application):
     def disconnect_chromecasts(self, *args):
         if self.cast:
             self.cast.quit_app()
+            self.cast.disconnect()
         self.clients_combo.set_active(-1)
     
     def on_file_clicked(self, *args):
@@ -236,7 +244,7 @@ class ChromecastPlayer(Gtk.Application):
         self.uri = ret
     
     def on_play_clicked(self, *args):
-        if self.cast:
+        if self.cast and self.cast.status:
             if self.play_uri:
                 if self.uri_ext not in ext_dict.keys():
                     self.play_uri = None
@@ -245,12 +253,28 @@ class ChromecastPlayer(Gtk.Application):
                 self.mc.play_media(self.play_uri, ext_dict[self.uri_ext])
                 self.play_uri = None
                 self.uri_ext = None
-            if self.mc.is_paused:
+            if self.is_paused:
                 self.mc.play()
     
+    def slider_changed(self, *args):
+        return False
+        """self.seeking = True
+        widget = args[0]
+        value = widget.get_value()
+        print(value)
+        return
+        if self.is_playing:
+            if self.mc.supports_seek:
+                dur = self.mc.status.duration
+                self.seeking = True
+                self.mc.seek(value)
+                widget.set_value(value/duration)
+                self.label.set_label("%02d:%02d/%02d:%02d"%(int(value/60), int(value%60), int(dur/60), int(dur%60)))
+                self.seeking = False"""
+
     def on_pause_clicked(self, *args):
         if self.cast:
-            if self.mc.is_playing:
+            if self.is_playing:
                 self.mc.pause()
     
     def on_net_stream_clicked(self, *args):
@@ -262,7 +286,6 @@ class ChromecastPlayer(Gtk.Application):
     def get_network_uri(self, url):
         self.uri_working = True
         try:
-            url2 = url[0]
             proc = subprocess.Popen(['youtube-dl', '-j', url], stdout=subprocess.PIPE)
             ret = proc.communicate()[0]
             dicti = json.loads(ret.decode('utf-8'))
@@ -293,10 +316,19 @@ class ChromecastPlayer(Gtk.Application):
     def _worker_thread(self):
         if self.stop_worker:
             return False
-        if self.cast:
+        if self.cast and self.cast.status:
+            self.disconnect.set_sensitive(True)
             if self.mc.is_playing:
-                self.progressbar.set_value(self.mc.status.current_time/self.mc.status.duration)
-                self.label.set_label("%d:%d/%d:%d"%(int(self.mc.status.current_time/60), int(self.mc.status.current_time%60), int(self.mc.status.duration/60), int(self.mc.status.duration%60)))
+                self.mc.update_status()
+                self.is_playing = True
+                self.is_paused = False
+                self.is_idle = False
+                self.is_disconnected = False
+                if not self.seeking:
+                    curr = self.mc.status.current_time
+                    dur = self.mc.status.duration
+                    self.progressbar.set_value(curr/dur)
+                    self.label.set_label("%02d:%02d/%02d:%02d"%(int(curr/60), int(curr%60), int(dur/60), int(dur%60)))
                 self.pause.set_sensitive(True)
                 self.stop.set_sensitive(True)
                 self.volume.set_sensitive(True)
@@ -311,8 +343,16 @@ class ChromecastPlayer(Gtk.Application):
                 if not self.play_uri:
                     self.play.set_sensitive(False)
             elif self.mc.is_paused:
-                self.progressbar.set_value(self.mc.status.current_time/self.mc.status.duration)
-                self.label.set_label("%d:%d/%d:%d"%(int(self.mc.status.current_time/60), int(self.mc.status.current_time%60), int(self.mc.status.duration/60), int(self.mc.status.duration%60)))
+                self.mc.update_status()
+                self.is_playing = False
+                self.is_paused = True
+                self.is_idle = False
+                self.is_disconnected = False
+                if not self.seeking:
+                    curr = self.mc.status.current_time
+                    dur = self.mc.status.duration
+                    self.progressbar.set_value(curr/dur)
+                    self.label.set_label("%02d:%02d/%02d:%02d"%(int(curr/60), int(curr%60), int(dur/60), int(dur%60)))
                 self.pause.set_sensitive(False)
                 self.play.set_sensitive(True)
                 self.volume.set_sensitive(True)
@@ -325,7 +365,12 @@ class ChromecastPlayer(Gtk.Application):
                     self.prev.set_sensitive(True)
                 else:
                     self.prev.set_sensitive(False)
-            elif self.mc.is_idle:
+            elif self.mc.is_active:
+                self.mc.update_status()
+                self.is_playing = False
+                self.is_paused = False
+                self.is_idle = True
+                self.is_disconnected = False
                 self.label.set_label("0:00/0:00")
                 self.stop.set_sensitive(False)
                 self.volume.set_sensitive(False)
@@ -334,8 +379,27 @@ class ChromecastPlayer(Gtk.Application):
                 self.progressbar.set_value(0.)
                 if not self.play_uri:
                     self.play.set_sensitive(False)
+            else:
+                self.is_playing = False
+                self.is_paused = False
+                self.is_idle = False
+                self.is_disconnected = False
+                self.label.set_label("0:00/0:00")
+                self.stop.set_sensitive(False)
+                self.pause.set_sensitive(False)
+                self.volume.set_sensitive(False)
+                self.prev.set_sensitive(False)
+                self.next.set_sensitive(False)
+                self.progressbar.set_value(0.)
+                if not self.play_uri:
+                    self.play.set_sensitive(False)
         else:
-            self.label.set_label("0:00/0:00")
+            self.is_playing = False
+            self.is_paused = False
+            self.is_idle = False
+            self.is_disconnected = True
+            self.disconnect.set_sensitive(False)
+            self.label.set_label("00:00/00:00")
             self.pause.set_sensitive(False)
             self.volume.set_sensitive(False)
             self.stop.set_sensitive(False)
@@ -350,7 +414,8 @@ class ChromecastPlayer(Gtk.Application):
             
 
     def on_preferences_clicked(self, *args):
-        preferences.Preferences()
+        win = preferences.Preferences()
+        win.run()
 
     def load_uri(self, *args):
         while True:
@@ -363,7 +428,8 @@ class ChromecastPlayer(Gtk.Application):
             n = Notify.Notification.new("Chromecast-player", "Error loading stream. Make sure the stream you entered is valid", Gtk.STOCK_STOP)
             n.show()
             return
-        self.play.set_sensitive(True)
+        if self.cast and self.cast.status:
+            self.play.set_sensitive(True)
         self.play_uri = self.uri
 
     def refresh_chromecasts(self, *args):

@@ -47,6 +47,7 @@ class Preferences(Gtk.Window):
         self.win = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
         config_chromecast = get_config('chromecast_player')
         vboxall = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        hboxbuttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         self.automatic_connect = Gtk.CheckButton(label=" Automatically connect to first available chromecast on startup")
         self.automatic_connect.set_active(config_chromecast['automatic_connect'])
@@ -59,6 +60,20 @@ class Preferences(Gtk.Window):
         vboxall.pack_start(self.automatic_connect, False, False, 20)
         vboxall.pack_start(self.enable_web, False, False, 20)
 
+
+        #close = Gtk.Button("_Close", use_underline=True)
+        #close.get_style_context().add_class("destructive-action")
+        #close.connect("clicked", self.exit)
+        
+        ok = Gtk.Button("_Apply", use_underline=True)
+        ok.get_style_context().add_class("suggested-action")
+        ok.connect("clicked", self.exit)
+
+        self.win.connect("delete-event", Gtk.main_quit) 
+        
+        hboxbuttons.pack_end(ok, False, False, 30)
+        vboxall.pack_end(hboxbuttons, False, False, 30)
+
         self.win.set_icon_name('chromecast-player')
         self.win.add(vboxall)
         self.win.set_size_request(500,50)
@@ -67,11 +82,16 @@ class Preferences(Gtk.Window):
         self.enable_web.set_margin_left(30)
         self.enable_web.set_margin_right(50)
         self.win.set_title('Preferences')
+        
+
+    def run(self):
         self.win.show_all()
+        Gtk.main()
+        self.win.destroy()
 
     def exit(self, *args):
-        self.win.close()
-        self.quit()
+        #self.win.close()
+        Gtk.main_quit()
 
     def config_changed(self, *args):
         state = args[0].get_active()
