@@ -100,7 +100,7 @@ class ChromecastPlayer(Gtk.Application):
         self.progressbar.set_margin_right(6)
         self.progressbar.set_draw_value(False)
         self.progressbar.set_range(0, 1)
-        self.progressbar.connect("value_changed", self.slider_changed)
+        self.progressbar_handler = self.progressbar.connect("value_changed", self.slider_changed)
     
         self.label = Gtk.Label(label='00:00/00:00')
         self.label.set_margin_left(6)
@@ -260,20 +260,26 @@ class ChromecastPlayer(Gtk.Application):
 
     
     def slider_changed(self, *args):
-        return False
-        """self.seeking = True
+        self.seeking = True
         widget = args[0]
         value = widget.get_value()
-        print(value)
-        return
-        if self.is_playing:
-            if self.mc.supports_seek:
-                dur = self.mc.status.duration
-                self.seeking = True
-                self.mc.seek(value)
-                widget.set_value(value/duration)
-                self.label.set_label("%02d:%02d/%02d:%02d"%(int(value/60), int(value%60), int(dur/60), int(dur%60)))
-                self.seeking = False"""
+        if self.is_playing or self.is_paused and self.mc.supports_seek:
+            dur = self.mc.status.duration
+            curr = self.mc.status.current_time
+            self.mc.seek(value*dur)
+            widget.set_value(value)
+            self.label.set_label("%02d:%02d/%02d:%02d"%(int(value/60), int(value%60), int(dur/60), int(dur%60)))
+            GLib.timeout_add(500,self._seeker_thread)
+        else:
+            return
+
+    def _seeker_thread(self, curr):
+        curr2 = self.mc.status.current_time
+        if curr == curr2:
+            return True
+        else:
+            self.seeking = False
+            return False
 
     def on_pause_clicked(self, *args):
         if self.cast:
@@ -340,7 +346,9 @@ class ChromecastPlayer(Gtk.Application):
                 if not self.seeking:
                     curr = self.mc.status.current_time
                     dur = self.mc.status.duration
+                    self.progressbar.handler_block(self.progressbar_handler)
                     self.progressbar.set_value(curr/dur)
+                    self.progressbar.handler_unblock(self.progressbar_handler)
                     self.label.set_label("%02d:%02d/%02d:%02d"%(int(curr/60), int(curr%60), int(dur/60), int(dur%60)))
                 self.pause.set_sensitive(True)
                 self.stop.set_sensitive(True)
@@ -360,11 +368,6 @@ class ChromecastPlayer(Gtk.Application):
                 self.is_paused = True
                 self.is_idle = False
                 self.is_disconnected = False
-                if not self.seeking:
-                    curr = self.mc.status.current_time
-                    dur = self.mc.status.duration
-                    self.progressbar.set_value(curr/dur)
-                    self.label.set_label("%02d:%02d/%02d:%02d"%(int(curr/60), int(curr%60), int(dur/60), int(dur%60)))
                 self.pause.set_sensitive(False)
                 self.play.set_sensitive(True)
                 self.volume.set_sensitive(True)
