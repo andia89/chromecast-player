@@ -29,7 +29,13 @@ class ChromecastPlayer(Gtk.Application):
         self.play_now = True if uri else False
         self.play_uri = None
         self.uri_ext = None
+        self.local = True
         self.uri_working = False
+        if uri and isinstance(uri, (list, tuple)):
+            self.playlist = True
+        else:
+            self.playlist = False
+        self.playlist_uri = []
         self.stop_worker = False
         self.is_playing = False
         self.is_paused = False
@@ -67,6 +73,9 @@ class ChromecastPlayer(Gtk.Application):
 
         loadButtonImage = Gtk.Image()
         loadButtonImage.set_from_stock(Gtk.STOCK_OK, Gtk.IconSize.BUTTON)
+        
+        playlistButtonImage = Gtk.Image()
+        playlistButtonImage.set_from_icon_name('view-media-playlist', Gtk.IconSize.BUTTON)
 
         disconnectButtonImage = Gtk.Image()
         disconnectButtonImage.set_from_stock(Gtk.STOCK_DISCONNECT, Gtk.IconSize.BUTTON)
@@ -118,6 +127,41 @@ class ChromecastPlayer(Gtk.Application):
                 if self.cast:
                     self.cast.wait()
                     self.clients_combo.set_active(0)
+                    if self.play_now:
+                        if not self.playlist:
+                            if not os.path.exists(urlparse(self.uri).path) and self.enable_web:
+                                self.local = False
+                                thread = threading.Thread(target=self.get_network_uri, args=(self.uri,))
+                                thread.start()
+                                self.load_uri()
+                                self.on_play_clicked()
+                            elif os.path.exists(urlparse(self.uri).path):
+                                self.local = True
+                                url = urlparse(self.uri).path
+                                url = unquote(url)
+                                self.play_uri = url
+                                self.on_play_clicked()
+                        else:
+                            for uris in self.uri:
+                                if not os.path.exists(urlparse(uris).path) and self.enable_web:
+                                    self.local = False
+                                    thread = threading.Thread(target=self.get_network_uri, args=(uris,))
+                                    thread.start()
+                                    self.load_uri()
+                                    if self.play_uri:
+                                        self.playlist_uri.append((self.play_uri, False))
+                                elif os.path.exists(urlparse(uris).path):
+                                    self.local = True
+                                    url = urlparse(uris).path
+                                    url = unquote(url)
+                                    self.playlist_uri.append((url, True))
+                            if len(self.playlist_uri) > 0:
+                                self.play_uri = self.playlist_uri[0][0]
+                                self.on_play_clicked()
+                            else:
+                                self.play_uri = None
+                                self.playlist_uri = []
+                            self.uri = None
             else:
                 self.clients_combo.set_active(-1)
         else:
@@ -136,6 +180,10 @@ class ChromecastPlayer(Gtk.Application):
         load = Gtk.Button()
         load.add(loadButtonImage)
         load.connect("clicked", self.load_uri)
+
+        playlist = Gtk.Button()
+        playlist.add(playlistButtonImage)
+        playlist.connect("clicked", self.add_to_playlist)
 
         self.disconnect = Gtk.Button()
         self.disconnect.add(disconnectButtonImage)
@@ -176,9 +224,11 @@ class ChromecastPlayer(Gtk.Application):
         mainmenu.append(filem)
         filem.connect('activate', self.on_file_clicked)
     
-        streamm = Gtk.MenuItem("Open network stream")
-        mainmenu.append(streamm)
-        streamm.connect('activate', self.on_net_stream_clicked)
+        self.streamm = Gtk.MenuItem("Open network stream")
+        mainmenu.append(self.streamm)
+        self.streamm.connect('activate', self.on_net_stream_clicked)
+        if not self.enable_web:
+            self.streamm.set_sensitive(False)
         
         prefm = Gtk.MenuItem("Preferences")
         mainmenu.append(prefm)
@@ -205,8 +255,7 @@ class ChromecastPlayer(Gtk.Application):
     def get_chromecast_config(self):
         chromecast_config = preferences.get_config('chromecast_player')
         self.automatic_connect = chromecast_config['automatic_connect']
-        self.enable_web = chromecast_config['enable_web'] #unfortunately pychromecast doesn't allow to cast local files :(
-        #might be something that is definitely worth adding in future versions
+        self.enable_web = chromecast_config['enable_web']
 
 
     def combo_changed_clients(self, widget):
@@ -244,12 +293,17 @@ class ChromecastPlayer(Gtk.Application):
     def on_file_clicked(self, *args):
         win = FileChooserWindow()
         ret = win.main()
-        self.uri = ret
+        if ret and isinstance(ret, (list, tuple)):
+            self.playlist_uri = ret
+            self.uri = None
+        else:
+            self.playlist_uri = None
+            self.uri = ret
     
     def on_play_clicked(self, *args):
         if self.cast and self.cast.status:
             if self.play_uri:
-                if self.uri.startswith("file:///"):
+                if self.local:
                     subprocess.Popen(["stream2chromecast", "-devicename", self.cast.host, self.play_uri])
                 else:
                     subprocess.Popen(["stream2chromecast", "-playurl", self.play_uri, "-devicename", self.cast.host])
@@ -269,11 +323,12 @@ class ChromecastPlayer(Gtk.Application):
             self.mc.seek(value*dur)
             widget.set_value(value)
             self.label.set_label("%02d:%02d/%02d:%02d"%(int(value/60), int(value%60), int(dur/60), int(dur%60)))
-            GLib.timeout_add(500,self._seeker_thread)
+            GLib.timeout_add(500,self._seeker_thread, curr)
         else:
             return
 
     def _seeker_thread(self, curr):
+        self.mc.update_status(blocking=True)
         curr2 = self.mc.status.current_time
         if curr == curr2:
             return True
@@ -432,6 +487,10 @@ class ChromecastPlayer(Gtk.Application):
     def on_preferences_clicked(self, *args):
         win = preferences.Preferences()
         win.run()
+        self.get_chromecast_config()
+        if not self.enable_web:
+            self.streamm.set_sensitive(False)
+        
 
     def load_uri(self, *args):
         while True:
@@ -447,10 +506,11 @@ class ChromecastPlayer(Gtk.Application):
         if self.cast and self.cast.status:
             self.play.set_sensitive(True)
         if self.uri.startswith("file:///"):
-            url = urlparse(self.uri).path
-            url = unquote(url)
-            self.play_uri = url
+            self.local = True
+            uri = unquote(urlparse(self.uri).path)
+            self.play_uri = uri
         else:
+            self.local = False
             self.play_uri = self.uri
 
     def refresh_chromecasts(self, *args):
