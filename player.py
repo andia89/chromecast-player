@@ -4,6 +4,7 @@ from gi import require_version
 require_version("Gtk", "3.0")
 require_version("Notify", "0.7")
 from gi.repository import Gtk, Gdk, Gio, GLib, Notify
+from urllib.parse import urlparse, unquote
 import pychromecast as pyc
 import preferences
 import threading
@@ -24,7 +25,8 @@ class ChromecastPlayer(Gtk.Application):
         self.connect("activate", self.on_activate, uri)
         self.cast = None
         self.get_chromecast_config()
-        self.uri = None
+        self.uri = uri
+        self.play_now = True if uri else False
         self.play_uri = None
         self.uri_ext = None
         self.uri_working = False
@@ -85,6 +87,7 @@ class ChromecastPlayer(Gtk.Application):
         self.pause.add(pauseButtonImage)
         self.stop = Gtk.Button()
         self.stop.add(stopButtonImage)
+        self.stop.connect("clicked", self.on_stop_clicked)
         self.prev = Gtk.Button()
         self.prev.add(prevButtonImage)
         self.next = Gtk.Button()
@@ -194,7 +197,7 @@ class ChromecastPlayer(Gtk.Application):
         self.win.connect("delete-event", self.exit) 
         vboxall.pack_start(menu_bar, False, False, 2)
         self._worker_thread()
-        GLib.timeout_add(100,self._worker_thread)
+        GLib.timeout_add(500,self._worker_thread)
         self.win.show_all()
         self.add_window(self.win)
 
@@ -246,15 +249,15 @@ class ChromecastPlayer(Gtk.Application):
     def on_play_clicked(self, *args):
         if self.cast and self.cast.status:
             if self.play_uri:
-                if self.uri_ext not in ext_dict.keys():
-                    self.play_uri = None
-                    self.uri_ext = None
-                    return
-                self.mc.play_media(self.play_uri, ext_dict[self.uri_ext])
+                if self.uri.startswith("file:///"):
+                    subprocess.Popen(["stream2chromecast", "-devicename", self.cast.host, self.play_uri])
+                else:
+                    subprocess.Popen(["stream2chromecast", "-playurl", self.play_uri, "-devicename", self.cast.host])
                 self.play_uri = None
                 self.uri_ext = None
             if self.is_paused:
                 self.mc.play()
+
     
     def slider_changed(self, *args):
         return False
@@ -276,6 +279,13 @@ class ChromecastPlayer(Gtk.Application):
         if self.cast:
             if self.is_playing:
                 self.mc.pause()
+
+    
+    def on_stop_clicked(self, *args):
+        if self.cast:
+            if self.is_playing or self.is_paused:
+                self.mc.stop()
+
     
     def on_net_stream_clicked(self, *args):
         win = NetworkStream()
@@ -309,7 +319,7 @@ class ChromecastPlayer(Gtk.Application):
                 ext = dicti['ext']
         except:
             url = None
-        self.uri_ext = ext
+        self.uri_ext = None
         self.uri = url
         self.uri_working = False
 
@@ -318,8 +328,11 @@ class ChromecastPlayer(Gtk.Application):
             return False
         if self.cast and self.cast.status:
             self.disconnect.set_sensitive(True)
-            if self.mc.is_playing:
-                self.mc.update_status()
+            try:
+                self.mc.update_status(blocking=True)
+            except:
+                pass
+            if self.mc.status.player_state == 'PLAYING' or (self.mc.status.player_state == 'BUFFERING' and self.mc.status.current_time != 0):
                 self.is_playing = True
                 self.is_paused = False
                 self.is_idle = False
@@ -342,8 +355,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.prev.set_sensitive(False)
                 if not self.play_uri:
                     self.play.set_sensitive(False)
-            elif self.mc.is_paused:
-                self.mc.update_status()
+            elif self.mc.status.player_state == 'PAUSED':
                 self.is_playing = False
                 self.is_paused = True
                 self.is_idle = False
@@ -365,8 +377,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.prev.set_sensitive(True)
                 else:
                     self.prev.set_sensitive(False)
-            elif self.mc.is_active:
-                self.mc.update_status()
+            elif self.mc.status.player_state == 'IDLE':
                 self.is_playing = False
                 self.is_paused = False
                 self.is_idle = True
@@ -377,8 +388,10 @@ class ChromecastPlayer(Gtk.Application):
                 self.prev.set_sensitive(False)
                 self.next.set_sensitive(False)
                 self.progressbar.set_value(0.)
+                self.pause.set_sensitive(False)
                 if not self.play_uri:
                     self.play.set_sensitive(False)
+
             else:
                 self.is_playing = False
                 self.is_paused = False
@@ -430,7 +443,12 @@ class ChromecastPlayer(Gtk.Application):
             return
         if self.cast and self.cast.status:
             self.play.set_sensitive(True)
-        self.play_uri = self.uri
+        if self.uri.startswith("file:///"):
+            url = urlparse(self.uri).path
+            url = unquote(url)
+            self.play_uri = url
+        else:
+            self.play_uri = self.uri
 
     def refresh_chromecasts(self, *args):
         self.clients_combo.handler_block_by_func(self.combo_changed_clients)
@@ -479,13 +497,9 @@ class FileChooserWindow(Gtk.Window):
 
     def add_filters(self, dialog):
         filter_text = Gtk.FileFilter()
-        filter_text.set_name("Supported Video/Audio files")
-        filter_text.add_mime_type("video/mp4")
-        filter_text.add_mime_type("audio/mp4")
-        filter_text.add_mime_type("audio/mp3")
-        filter_text.add_mime_type("audio/mpeg")
-        filter_text.add_mime_type("video/webm")
-        filter_text.add_mime_type("audio/webm")
+        filter_text.set_name("Video/Audio files")
+        filter_text.add_mime_type("video/*")
+        filter_text.add_mime_type("audio/*")
         dialog.add_filter(filter_text)
 
 class NetworkStream(Gtk.Window):
