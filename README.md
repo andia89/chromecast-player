@@ -10,9 +10,10 @@ The script needs Python3.x to run, and relies on `pychromecast` that does the co
 ##Usage
 Just download the repo, `cd` into the folder and run:
 
-´´´
+```
 ./player.py
 ```
+
 
 You can pass uris (either local files or network streams)
 
