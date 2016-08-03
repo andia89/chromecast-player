@@ -30,7 +30,6 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         filepath = urllib.parse.unquote_plus(self.path)
         
         self.send_headers(filepath)       
-        
         self.write_response(filepath)
 
 
@@ -43,7 +42,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
 
     def write_response(self, filepath):
-        with open(filepath, "rb") as f: 
+        with open(filepath, "br") as f: 
             self.wfile.write(f.read())    
 
 
@@ -60,13 +59,13 @@ class TranscodingRequestHandler(RequestHandler):
 
         for line in ffmpeg_process.stdout:
             chunk_size = "%0.2X" % len(line)
-            self.wfile.write(chunk_size)
-            self.wfile.write("\r\n")
+            self.wfile.write(chunk_size.encode())
+            self.wfile.write("\r\n".encode())
             self.wfile.write(line) 
-            self.wfile.write("\r\n")            
+            self.wfile.write("\r\n".encode())
             
-        self.wfile.write("0")
-        self.wfile.write("\r\n\r\n")             
+        self.wfile.write("0".encode())
+        self.wfile.write("\r\n\r\n".encode())
         
         
     def send_headers(self, filepath):
@@ -74,5 +73,5 @@ class TranscodingRequestHandler(RequestHandler):
         self.send_response(200)
         self.send_header("Content-type", self.content_type)
         self.send_header("Transfer-Encoding", "chunked")
-        self.end_headers()             
+        self.end_headers()
 

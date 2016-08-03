@@ -17,12 +17,14 @@ import http.server
 import os
 import socket
 
+FFMPEG = 'ffmpeg -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
+AVCONV = 'avconv -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
 
-supported_formats = {'mp4':('video/mp4', 0), 'webm':('video/webm', 1), 'ogg':('audio/ogg', 2), 'flac':("audio/flac", 1.5), 'mp3':('audio/mpeg', 3), 'wav':('audio/wav', 4)}
+supported_formats = {'mp4':('video/mp4', 0), 'webm':('video/webm', 1), 'ogg':('audio/ogg', 2), 'flac':("audio/flac", 1.5),'flac':("audio/x-flac", 1.6), 'mp3':('audio/mpeg', 3), 'wav':('audio/wav', 4)}
 
 class ChromecastPlayer(Gtk.Application):
 
-    def __init__(self, uri):
+    def __init__(self, uri, show_gui=True):
         Gtk.Application.__init__(self,
                                  application_id='org.gnome.chromecast-player',
                                  flags=Gio.ApplicationFlags.FLAGS_NONE)
@@ -35,13 +37,15 @@ class ChromecastPlayer(Gtk.Application):
         self.play_now = True if uri else False
         self.play_uri = []
         self.uri_working = False
-        self.transcoder, self.probe = get_transcoder_cmds()
+        self.serverthread = None
         self.local_port = 0
+        self.show_gui = show_gui
         self.transcode_options = None
         if uri and not isinstance(uri, (list, tuple)):
             self.uri = [uri]
         elif uri:
             self.uri = uri
+        self.play_load = []
         self.multiple_files = False
         self.loaded = False
         self.loc_file = None
@@ -52,11 +56,16 @@ class ChromecastPlayer(Gtk.Application):
         self.is_disconnected = False
         self.playlist_counter = 0
         self.seeking = False
-    
+        self.overwrite = False
+        self.continue_playing = False
+        self.volume_changing = False
+
+
     def exit(self, *args):
         self.win.close()
         self.stop_worker = True
         self.quit()
+
 
     def _on_activate(self, app, uri):
         self.win = Gtk.ApplicationWindow(Gtk.WindowType.TOPLEVEL, application=app)
@@ -97,12 +106,12 @@ class ChromecastPlayer(Gtk.Application):
 
         self.win.add(vboxall)
         self.win.set_size_request(500,50)
-        
+
         self.play = Gtk.Button()
-        
+
         self.play.add(playButtonImage)
         self.pause = Gtk.Button()
-        
+
         self.pause.add(pauseButtonImage)
         self.stop = Gtk.Button()
         self.stop.add(stopButtonImage)
@@ -114,17 +123,21 @@ class ChromecastPlayer(Gtk.Application):
 
         refresh = Gtk.Button()
         refresh.add(refreshButtonImage)
+        refresh.set_tooltip_text("Refresh chromecast list")
 
         self.load = Gtk.Button()
         self.load.add(loadButtonImage)
+        self.load.set_tooltip_text("Load last uri to be played")
         self.load.set_sensitive(False)
 
         self.playlist_button = Gtk.Button()
+        self.playlist_button.set_tooltip_text("Add uri(s) to current playlist")
         self.playlist_button.add(playlistButtonImage)
         self.playlist_button.set_sensitive(False)
 
         self.disconnect = Gtk.Button()
         self.disconnect.add(disconnectButtonImage)
+        self.disconnect.set_tooltip_text("Disconnect from chromecast")
 
         self.volume = Gtk.VolumeButton()
 
@@ -151,16 +164,20 @@ class ChromecastPlayer(Gtk.Application):
                     self.cast.wait()
                     self.clients_combo.set_active(0)
                     if self.play_now:
-                        #TODO
-                        pass
+                        for uri in self.uri:
+                            if self.decode_local_uri(uri): 
+                                continue
+                            else:
+                                self.get_network_uri(uri)
+                        print(self.play_load)
+                        self._on_playlist_clicked()
+                        self._on_play_clicked()
             else:
                 self.clients_combo.set_active(-1)
         else:
             self.clientstore.append([""])
             self.clients_combo.set_sensitive(False)
-        
 
-        
         renderer_text = Gtk.CellRendererText()
         renderer_text.set_fixed_size(120, 20)
         self.clients_combo.pack_start(renderer_text, True)
@@ -184,7 +201,7 @@ class ChromecastPlayer(Gtk.Application):
         hboxbuttons.pack_start(self.pause, False, False, 2)
         hboxbuttons.pack_start(self.stop, False, False, 2)
         hboxbuttons.pack_start(self.prev, False, False, 2)
-        hboxbuttons.pack_start(self.__next__, False, False, 2)
+        hboxbuttons.pack_start(self.next, False, False, 2)
 
         hboxbuttons.pack_end(hboxclient, False, False, 0)
         hboxbuttons.set_margin_left(10)
@@ -227,9 +244,12 @@ class ChromecastPlayer(Gtk.Application):
         self.pause.connect("clicked", self._on_pause_clicked)
         self.stop.connect("clicked", self._on_stop_clicked)
         self.progressbar.connect("value_changed", self.slider_changed)
+        self.volume.connect("value_changed", self.volume_changed)
         self.clients_combo.connect("changed", self.combo_changed_clients)
         refresh.connect("clicked", self._on_refresh_clicked)
         self.load.connect("clicked", self._on_load_clicked)
+        self.next.connect("clicked", self._on_next_clicked)
+        self.prev.connect("clicked", self._on_prev_clicked)
         self.playlist_button.connect("clicked", self._on_playlist_clicked)
         self.disconnect.connect("clicked", self._on_disconnect_clicked)
         filem.connect('activate', self._on_file_clicked)
@@ -240,7 +260,8 @@ class ChromecastPlayer(Gtk.Application):
 
         self._worker_thread()
         GLib.timeout_add(500,self._worker_thread)
-        self.win.show_all()
+        if self.show_gui:
+            self.win.show_all()
         self.add_window(self.win)
 
 
@@ -263,29 +284,25 @@ class ChromecastPlayer(Gtk.Application):
     def _on_file_clicked(self, *args):
         win = FileChooserWindow()
         ret = win.main()
-        if ret and isinstance(ret, (list, tuple)):
-            for u,i in enumerate(ret):
+        if ret:
+            if len(ret) > 1:
                 self.multiple_files = True
-                self.decode_local_uri(u)
-                if i == 0:
-                    self.loc_file = self.play_uri[-1]
-        elif ret:
-            self.multiple_files = False
-            self.decode_local_uri(ret)
-        self.load.set_sensitive(True)
-        self.playlist_button.set_sensitive(True)
+                for i,u in enumerate(ret):
+                    self.decode_local_uri(u)
+                    if i == 0:
+                        self.loc_file = self.play_load[-1]
+            elif ret:
+                self.multiple_files = False
+                self.decode_local_uri(ret[0])
+            self.load.set_sensitive(True)
+            self.playlist_button.set_sensitive(True)
 
 
     def _on_play_clicked(self, *args):
         if self.cast and self.cast.status:
             if self.loaded:
-                self.mc.stop()
-                self.cast.wait()
-                if self.play_uri[self.playlist_counter][1]:
-                    url, mime = local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
-                    self.mc.play_media(url, mime)
-                else:
-                    self.mc.play_media(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][2])
+                self.overwrite = False
+                self.play_media()
                 self.loaded = False
             if self.is_paused:
                 self.mc.play()
@@ -301,21 +318,29 @@ class ChromecastPlayer(Gtk.Application):
         if self.cast:
             if self.is_playing or self.is_paused:
                 self.mc.stop()
+                if self.serverthread:
+                    while self.serverthread.isAlive():
+                        time.sleep(0.5)
+        self.playlist_counter = 0
         self.play_uri = []
+        self.continue_playing = False
 
 
     def _on_net_stream_clicked(self, *args):
         win = NetworkStream()
         ret = win.main()
-        thread = threading.Thread(target=self.get_network_uri, args=(ret,))
-        thread.start()
-        while self.uri_working:
-            time.sleep(1)
-        self.load.set_sensitive(True)
-        self.playlist_button.set_sensitive(True)
+        if ret:
+            thread = threading.Thread(target=self.get_network_uri, args=(ret,))
+            thread.start()
+            while self.uri_working:
+                time.sleep(1)
+            self.load.set_sensitive(True)
+            self.playlist_button.set_sensitive(True)
 
 
     def _on_load_clicked(self, *args):
+        if self.play_uri:
+            self.play.set_sensitive(True)
         while True:
             if not self.uri_working:
                 break
@@ -324,9 +349,9 @@ class ChromecastPlayer(Gtk.Application):
             self.multiple_files = False
             self.play_uri = [self.loc_file]
         else:
-            self.play_uri = [self.play_uri[-1]]
+            self.play_uri = [self.play_load[-1]]
+        self.play_load = []
         self.playlist_counter = 0
-        self.play.set_sensitive(True)
         self.loaded = True
         self.load.set_sensitive(False)
         self.playlist_button.set_sensitive(False)
@@ -337,6 +362,13 @@ class ChromecastPlayer(Gtk.Application):
             if not self.uri_working:
                 break
             time.sleep(0.5)
+        if not self.play_uri or self.overwrite:
+            self.loaded = True
+            self.play_uri = self.play_load.copy()
+            self.overwrite = False
+        else:
+            self.play_uri += self.play_load
+        self.play_load = []
         self.load.set_sensitive(False)
         self.playlist_button.set_sensitive(False)
 
@@ -366,8 +398,13 @@ class ChromecastPlayer(Gtk.Application):
         chromecast_config = preferences.get_config('chromecast_player')
         self.automatic_connect = chromecast_config['automatic_connect']
         self.enable_web = chromecast_config['enable_web']
+        if not chromecast_config['enable_transcoding']:
+            self.transcoder = None
+            self.probe = None
         self.transcoder = chromecast_config['enable_transcoding']
         self.preferred_transcoder = chromecast_config["preferred_transcoder"]
+        self.local_port = chromecast_config["local_port"]
+        self.transcoder, self.probe = get_transcoder_cmds(preferred_transcoder=self.preferred_transcoder)
 
 
     def combo_changed_clients(self, widget):
@@ -390,6 +427,44 @@ class ChromecastPlayer(Gtk.Application):
             dialog.run()
             dialog.destroy()
 
+    def _on_next_clicked(self, *args):
+        if self.cast and self.cast.status:
+            if self.continue_playing and (self.playlist_counter + 1) < len(self.play_uri):
+                self.playlist_counter += 1
+                self.play_media()
+                self.loaded = False
+            elif (self.playlist_counter + 1) >= len(self.play_uri):
+                self.continue_playing = False
+                self.overwrite = True
+                self.playlist_counter = 0
+                self.mc.stop()
+                if self.serverthread:
+                    while self.serverthread.isAlive():
+                        time.sleep(0.5)                
+                if self.play_uri:
+                    self.loaded = True
+
+
+    def _on_prev_clicked(self, *args):
+        if self.cast and self.cast.status:
+            if self.playlist_counter != 0:
+                self.playlist_counter += -1
+                self.play_media()
+                self.loaded = False
+
+
+    def play_media(self):
+        self.mc.stop()
+        self.cast.wait()
+        if self.serverthread:
+            while self.serverthread.isAlive():
+                time.sleep(0.5)
+        if self.play_uri[self.playlist_counter][1]:
+            url, mime = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
+            self.mc.play_media(url, mime)
+        else:
+            self.mc.play_media(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][2])
+
 
     def connect_to_chromecast(self, name):
         self.cast = pyc.get_chromecast(friendly_name=name)
@@ -411,6 +486,25 @@ class ChromecastPlayer(Gtk.Application):
             GLib.timeout_add(500,self._seeker_thread, curr)
         else:
             return
+
+    def volume_changed(self, *args):
+        self.volume_changing = True
+        widget = args[0]
+        value = widget.get_value()
+        if self.is_playing or self.is_paused:
+            self.cast.set_volume(value)
+        GLib.timeout_add(500,self._volume_thread, value)
+
+
+    def _volume_thread(self, curr):
+        st = time.time()
+        self.mc.update_status(blocking=True)
+        curr2 = self.mc.status.volume_level
+        if curr != curr2:
+            return True
+        elif time.time()-st < 2 or curr == curr2:
+            self.volume_changing = False
+            return False
 
 
     def _seeker_thread(self, curr):
@@ -437,9 +531,10 @@ class ChromecastPlayer(Gtk.Application):
             if mime == supported_formats[k][0]:
                 transcode = False
         if os.path.exists(url):
-            if transcode and self.transcoder:
-                self.play_uri.append((url, True, mime, transcode))
-
+            self.play_load.append((url, True, mime, transcode and self.transcoder))
+            return True
+        else:
+            return False
 
     def get_network_uri(self, url):
         self.uri_working = True
@@ -467,12 +562,11 @@ class ChromecastPlayer(Gtk.Application):
                 url = dicti['url']
                 mime = supported_formats[dicti['ext']][0]
             if url:
-                self.play_uri.append((url, False, mime, False))
+                self.play_load.append((url, False, mime, False))
                 self.multiple_files = False
         except Exception as e:
             pass
         self.uri_working = False
-
 
     def _worker_thread(self):
         if self.stop_worker:
@@ -484,6 +578,7 @@ class ChromecastPlayer(Gtk.Application):
             except:
                 pass
             if self.mc.status.player_state == 'PLAYING' or (self.mc.status.player_state == 'BUFFERING' and self.mc.status.current_time != 0):
+                self.continue_playing = True
                 self.is_playing = True
                 self.is_paused = False
                 self.is_idle = False
@@ -498,6 +593,10 @@ class ChromecastPlayer(Gtk.Application):
                 self.pause.set_sensitive(True)
                 self.stop.set_sensitive(True)
                 self.volume.set_sensitive(True)
+                if not self.volume_changing:
+                    self.volume.handler_block_by_func(self.volume_changed)
+                    self.volume.set_value(self.mc.status.volume_level)
+                    self.volume.handler_unblock_by_func(self.volume_changed)
                 if self.mc.status.supports_skip_forward or (len(self.play_uri) > self.playlist_counter + 1):
                     self.next.set_sensitive(True)
                 else:
@@ -509,7 +608,8 @@ class ChromecastPlayer(Gtk.Application):
                 if not self.loaded:
                     self.play.set_sensitive(False)
                 else:
-                    self.play.set_sensitive(True)
+                    if self.play_uri:
+                        self.play.set_sensitive(True)
             elif self.mc.status.player_state == 'PAUSED':
                 self.is_playing = False
                 self.is_paused = True
@@ -518,6 +618,10 @@ class ChromecastPlayer(Gtk.Application):
                 self.pause.set_sensitive(False)
                 self.play.set_sensitive(True)
                 self.volume.set_sensitive(True)
+                if not self.volume_changing:
+                    self.volume.handler_block_by_func(self.volume_changed)
+                    self.volume.set_value(self.mc.status.volume_level)
+                    self.volume.handler_unblock_by_func(self.volume_changed)
                 self.stop.set_sensitive(True)
                 if self.mc.status.supports_skip_forward or (len(self.play_uri) > self.playlist_counter + 1):
                     self.next.set_sensitive(True)
@@ -535,6 +639,9 @@ class ChromecastPlayer(Gtk.Application):
                 self.label.set_label("0:00/0:00")
                 self.stop.set_sensitive(False)
                 self.volume.set_sensitive(False)
+                self.volume.handler_block_by_func(self.volume_changed)
+                self.volume.set_value(0)
+                self.volume.handler_unblock_by_func(self.volume_changed)
                 self.prev.set_sensitive(False)
                 self.next.set_sensitive(False)
                 self.progressbar.handler_block_by_func(self.slider_changed)
@@ -544,8 +651,10 @@ class ChromecastPlayer(Gtk.Application):
                 if not self.loaded:
                     self.play.set_sensitive(False)
                 else:
-                    self.play.set_sensitive(True)
-
+                    if self.play_uri:
+                        self.play.set_sensitive(True)
+                if self.continue_playing and self.mc.status.idle_reason == 'FINISHED':
+                    self._on_next_clicked()
             else:
                 self.is_playing = False
                 self.is_paused = False
@@ -555,6 +664,9 @@ class ChromecastPlayer(Gtk.Application):
                 self.stop.set_sensitive(False)
                 self.pause.set_sensitive(False)
                 self.volume.set_sensitive(False)
+                self.volume.handler_block_by_func(self.volume_changed)
+                self.volume.set_value(0)
+                self.volume.handler_unblock_by_func(self.volume_changed)
                 self.prev.set_sensitive(False)
                 self.next.set_sensitive(False)
                 self.progressbar.handler_block_by_func(self.slider_changed)
@@ -563,8 +675,10 @@ class ChromecastPlayer(Gtk.Application):
                 if not self.loaded:
                     self.play.set_sensitive(False)
                 else:
-                    self.play.set_sensitive(True)
+                    if self.play_uri:
+                        self.play.set_sensitive(True)
         else:
+            self.continue_playing = False
             self.is_playing = False
             self.is_paused = False
             self.is_idle = False
@@ -573,16 +687,16 @@ class ChromecastPlayer(Gtk.Application):
             self.label.set_label("00:00/00:00")
             self.pause.set_sensitive(False)
             self.volume.set_sensitive(False)
+            self.volume.handler_block_by_func(self.volume_changed)
+            self.volume.set_value(0)
+            self.volume.handler_unblock_by_func(self.volume_changed)
             self.stop.set_sensitive(False)
             self.prev.set_sensitive(False)
             self.next.set_sensitive(False)
             self.progressbar.handler_block_by_func(self.slider_changed)
             self.progressbar.set_value(0.)
             self.progressbar.handler_unblock_by_func(self.slider_changed)
-            if self.loaded:
-                self.play.set_sensitive(True)
-            else:
-                self.play.set_sensitive(False)
+            self.play.set_sensitive(False)
         return True 
 
 
@@ -593,19 +707,18 @@ class ChromecastPlayer(Gtk.Application):
             filename = os.path.abspath(filename)
         else:
             return None
-        
-        transcoder_cmd, probe_cmd = get_transcoder_cmds(preferred_transcoder=transcoder)
-        mimetype = get_mimetype(filename, probe_cmd)
+
+        mimetype = get_mimetype(filename, self.probe)
         status = self.cast.status
-        webserver_ip = status['client'][0]
+        webserver_ip =[(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
         
         req_handler = local_server.RequestHandler
 
         if transcode:
-            if transcoder_cmd == "ffmpeg":  
+            if transcoder == "ffmpeg":  
                 req_handler = local_server.TranscodingRequestHandler
                 req_handler.transcoder_command = FFMPEG
-            elif transcoder_cmd == "avconv":   
+            elif transcoder == "avconv":   
                 req_handler = local_server.TranscodingRequestHandler
                 req_handler.transcoder_command = AVCONV
             
@@ -636,21 +749,22 @@ class FileChooserWindow(Gtk.Window):
 
     def __init__(self):
         self.win = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-    
+
+
     def main(self):
         dialog = Gtk.FileChooserDialog("Please choose a file", self.win,
             Gtk.FileChooserAction.OPEN,
             (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
              Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
-
+        dialog.set_select_multiple(True)
         self.add_filters(dialog)
         ret = None
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
-            ret = dialog.get_uri()
+            ret = dialog.get_uris()
         dialog.destroy()
         return ret
-        
+
 
     def add_filters(self, dialog):
         filter_text = Gtk.FileFilter()
@@ -670,7 +784,8 @@ class NetworkStream(Gtk.Window):
                    (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
              Gtk.STOCK_OK   , Gtk.ResponseType.OK))
         self.ret = None
-    
+
+
     def main(self):
         self.win.set_title("Enter URL for network stream")
         self.entry = Gtk.Entry()
@@ -687,7 +802,7 @@ class NetworkStream(Gtk.Window):
             self.ret = self.entry.get_text()
         self.win.destroy()
         return self.ret
-        
+
 
 def get_mimetype(filename, ffprobe_cmd=None):
     """ find the container format of the file """
@@ -759,6 +874,7 @@ def get_mimetype(filename, ffprobe_cmd=None):
 
     return mimetype
 
+
 def get_transcoder_cmds(preferred_transcoder=None):
     """ establish which transcoder utility to use depending on what is installed """
     probe_cmd = None
@@ -796,3 +912,8 @@ def is_transcoder_installed(transcoder_application):
     except OSError:
         return False
 
+
+if __name__ == '__main__':
+    import sys
+    win = ChromecastPlayer(sys.argv[1:])
+    win.run()

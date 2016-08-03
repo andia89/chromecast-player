@@ -8,7 +8,7 @@ import subprocess
 
 config = configparser.ConfigParser()
 configfile = '/home/andreas/.config/chromecast_player'
-default_vals = {'chromecast_player': {'automatic_connect': False, 'enable_web': False, 'enable_transcoding': False, 'local_port': "", 'transcoding_options':"", "radio":""}}
+default_vals = {'chromecast_player': {'automatic_connect': False, 'enable_web': False, 'enable_transcoding': False, 'local_port': "", 'transcoding_options':"", "preferred_transcoder":""}}
 
 def get_config(section):
     config.read(configfile)
