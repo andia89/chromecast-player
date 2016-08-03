@@ -22,5 +22,6 @@ You can pass uris (either local files or network streams)
 ```
 
 ##Acknowledgments
-The script relies heavily on [pychromecast](https://github.com/balloob/pychromecast) written by Paulus Schoutsen
+The script relies heavily on [pychromecast](https://github.com/balloob/pychromecast) written by Paulus Schoutsen.
+
 A lot of code is also taken from [stream2chromecast](https://github.com/Pat-Carter/stream2chromecast) written by Pat-Carter who figured out how to stream local files to the chromecast. 
