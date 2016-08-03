@@ -4,21 +4,17 @@ from gi import require_version
 require_version("Gtk", "3.0")
 require_version("Notify", "0.7")
 from gi.repository import Gtk, Gdk, Gio, GLib, Notify
-from urllib.parse import urlparse, unquote, quote_plus
+from urllib.parse import urlparse, unquote
 import pychromecast as pyc
 import preferences
 import threading
 import subprocess
-import mimetypes
 import server as local_server
 import time
 import json
-import http.server
 import os
-import socket
 
-
-supported_formats = {'mp4':('video/mp4', 0), 'webm':('video/webm', 1), 'ogg':('audio/ogg', 2), 'flac':("audio/flac", 1.5), 'mp3':('audio/mpeg', 3), 'wav':('audio/wav', 4)}
+ext_dict = {'mp4':'video/mp4', 'mkv':'video/mp4', 'webm':'video/webm'}
 
 class ChromecastPlayer(Gtk.Application):
 
@@ -35,9 +31,7 @@ class ChromecastPlayer(Gtk.Application):
         self.play_now = True if uri else False
         self.play_uri = []
         self.uri_working = False
-        self.transcoder, self.probe = get_transcoder_cmds()
         self.local_port = 0
-        self.transcode_options = None
         if uri and not isinstance(uri, (list, tuple)):
             self.uri = [uri]
         elif uri:
@@ -184,7 +178,7 @@ class ChromecastPlayer(Gtk.Application):
         hboxbuttons.pack_start(self.pause, False, False, 2)
         hboxbuttons.pack_start(self.stop, False, False, 2)
         hboxbuttons.pack_start(self.prev, False, False, 2)
-        hboxbuttons.pack_start(self.__next__, False, False, 2)
+        hboxbuttons.pack_start(self.next, False, False, 2)
 
         hboxbuttons.pack_end(hboxclient, False, False, 0)
         hboxbuttons.set_margin_left(10)
@@ -282,8 +276,7 @@ class ChromecastPlayer(Gtk.Application):
                 self.mc.stop()
                 self.cast.wait()
                 if self.play_uri[self.playlist_counter][1]:
-                    url, mime = local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
-                    self.mc.play_media(url, mime)
+                    subprocess.Popen(["stream2chromecast", "-devicename", self.cast.host, self.play_uri[self.playlist_counter][0]])
                 else:
                     self.mc.play_media(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][2])
                 self.loaded = False
@@ -366,8 +359,6 @@ class ChromecastPlayer(Gtk.Application):
         chromecast_config = preferences.get_config('chromecast_player')
         self.automatic_connect = chromecast_config['automatic_connect']
         self.enable_web = chromecast_config['enable_web']
-        self.transcoder = chromecast_config['enable_transcoding']
-        self.preferred_transcoder = chromecast_config["preferred_transcoder"]
 
 
     def combo_changed_clients(self, widget):
@@ -429,16 +420,8 @@ class ChromecastPlayer(Gtk.Application):
                 break
             time.sleep(0.5)
         url = unquote(urlparse(uri).path)
-        mime = get_mimetype(url, self.probe)
-        transcode = False
-        if self.transcoder:
-            transcode = True
-        for k in supported_formats.keys():
-            if mime == supported_formats[k][0]:
-                transcode = False
         if os.path.exists(url):
-            if transcode and self.transcoder:
-                self.play_uri.append((url, True, mime, transcode))
+            self.play_uri.append((url, True))
 
 
     def get_network_uri(self, url):
@@ -447,29 +430,25 @@ class ChromecastPlayer(Gtk.Application):
             proc = subprocess.Popen(['youtube-dl', '-j', url], stdout=subprocess.PIPE)
             ret = proc.communicate()[0]
             dicti = json.loads(ret.decode('utf-8'))
-            if 'formats' in list(dicti.keys()):
-                exts = []
-                for fs in dicti['formats']:
-                    ind = 100
-                    if not fs['ext'] in exts:
-                        exts.append(fs['ext'])
-                exte = 'mp4'
-                mime = 'video/mp4'
-                for ext in exts:
-                    if ext in supported_formats.keys() and ind > supported_formats[ext][1]:
-                        ind = supported_formats[ext][1]
-                        mime = supported_formats[ext][0]
-                        exte = ext
-                proc = subprocess.Popen(['youtube-dl', '-f', exte, '-g', url], stdout=subprocess.PIPE)
-                ret = proc.communicate()[0].decode('utf-8')
-                url = ret
+            if 'formats' in dicti.keys():
+                d = dicti['formats']
+                res2 = d[0]['width']
+                ind = 0
+                for j, res in enumerate(d):
+                    if not res['width']: continue
+                    if not res2: res2 = res['width'] 
+                    if res['width'] > res2:
+                        res2 = res['width']
+                        ind = j
+                    elif res['width'] == res2:
+                        if res['ext'] == 'mp4':
+                            ind = j
+                url = d[ind]['url']
             else:
                 url = dicti['url']
-                mime = supported_formats[dicti['ext']][0]
-            if url:
-                self.play_uri.append((url, False, mime, False))
-                self.multiple_files = False
-        except Exception as e:
+            self.play_uri.append((url, False, ext))
+            self.multiple_files = False
+        except:
             pass
         self.uri_working = False
 
@@ -586,7 +565,7 @@ class ChromecastPlayer(Gtk.Application):
         return True 
 
 
-    def local_url(self, filename, transcode=False, transcoder=None, transcode_options=None, server_port=None):
+    def local_url(filename, transcode=False, transcoder=None, transcode_options=None, server_port=None):
         """ play a local file on the chromecast """
 
         if os.path.isfile(filename):
@@ -594,13 +573,19 @@ class ChromecastPlayer(Gtk.Application):
         else:
             return None
         
-        transcoder_cmd, probe_cmd = get_transcoder_cmds(preferred_transcoder=transcoder)
-        mimetype = get_mimetype(filename, probe_cmd)
-        status = self.cast.status
+        transcoder_cmd, probe_cmd = local_server.get_transcoder_cmds(preferred_transcoder=transcoder)
+
+        mimetype = local_server.get_mimetype(filename, probe_cmd)
+
+        status = cast.get_status()
         webserver_ip = status['client'][0]
+        
+        print("my ip address:", webserver_ip)
+            
         
         req_handler = local_server.RequestHandler
 
+        
         if transcode:
             if transcoder_cmd == "ffmpeg":  
                 req_handler = local_server.TranscodingRequestHandler
@@ -611,23 +596,26 @@ class ChromecastPlayer(Gtk.Application):
             
             if transcode_options is not None:    
                 req_handler.transcode_options = transcode_options
-
+        else:
+            req_handler.content_type = mimetype
+            
+        
         # create a webserver to handle a single request on a free port or a specific port if passed in the parameter   
         port = 0    
+        
         if server_port is not None:
             port = int(server_port)
             
-        server = http.server.HTTPServer((webserver_ip, port), req_handler)
-        self.serverthread = threading.Thread(target=server.handle_request)
-        self.serverthread.start()    
-
-        url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
+        server = BaseHTTPServer.HTTPServer((webserver_ip, port), req_handler)
         
+        self.serverthread = Thread(target=server.handle_request)
+        self.thread.start()    
+
         return url, req_handler.content_type
 
 
     def get_active_chromecasts(self):
-        casts = list(pyc.get_chromecasts_as_dict().keys())
+        casts = pyc.get_chromecasts_as_dict().keys()
         self.chromecasts = list(casts)
         return self.chromecasts
 
@@ -703,9 +691,12 @@ def get_mimetype(filename, ffprobe_cmd=None):
     # use the OS file command...
     try:
         file_cmd = 'file --mime-type -b "%s"' % filename
-        file_mimetype = subprocess.check_output(file_cmd, shell=True).strip().lower().decode('utf-8')
+        file_mimetype = subprocess.check_output(file_cmd, shell=True).strip().lower()
+        
         if file_mimetype.startswith("video/") or file_mimetype.startswith("audio/"):
             mimetype = file_mimetype
+            
+            print "OS identifies the mimetype as :", mimetype
             return mimetype
     except:
         pass
@@ -721,16 +712,14 @@ def get_mimetype(filename, ffprobe_cmd=None):
     
     ffprobe_cmd = '%s -show_streams -show_format "%s"' % (ffprobe_cmd, filename)
     ffmpeg_process = subprocess.Popen(ffprobe_cmd, stdout=subprocess.PIPE, shell=True)
-    print(ffmpeg_process)
+
     for line in ffmpeg_process.stdout:
-        l = line.decode('utf-8')
-        print(l)
-        if l.startswith("codec_type=audio"):
+        if line.startswith("codec_type=audio"):
             has_audio = True
-        elif l.startswith("codec_type=video"):
+        elif line.startswith("codec_type=video"):
             has_video = True    
-        elif l.startswith("format_name="):
-            name, value = l.split("=")
+        elif line.startswith("format_name="):
+            name, value = line.split("=")
             format_name = value.strip().lower().split(",")
 
     # use the default if it isn't possible to identify the format type
@@ -752,47 +741,11 @@ def get_mimetype(filename, ffprobe_cmd=None):
         mimetype = "audio/mpeg"
     elif "wav" in format_name:
         mimetype = "audio/wav"
-    elif "flac" in format_name:
-        mimetype = "audio/flac"
     else:   
         mimetype += "mp4"
 
     return mimetype
 
-def get_transcoder_cmds(preferred_transcoder=None):
-    """ establish which transcoder utility to use depending on what is installed """
-    probe_cmd = None
-    transcoder_cmd = None
-    
-    ffmpeg_installed = is_transcoder_installed("ffmpeg")
-    avconv_installed = is_transcoder_installed("avconv")  
-    
-    # if anything other than avconv is preferred, try to use ffmpeg otherwise use avconv    
-    if preferred_transcoder != "avconv":
-        if ffmpeg_installed:
-            transcoder_cmd = "ffmpeg"
-            probe_cmd = "ffprobe"
-        elif avconv_installed:
-            transcoder_cmd = "avconv"
-            probe_cmd = "avprobe"
-    
-    # otherwise, avconv is preferred, so try to use avconv, followed by ffmpeg  
-    else:
-        if avconv_installed:
-            transcoder_cmd = "avconv"
-            probe_cmd = "avprobe"
-        elif ffmpeg_installed:
-            transcoder_cmd = "ffmpeg"
-            probe_cmd = "ffprobe"
-            
-    return transcoder_cmd, probe_cmd
 
 
-def is_transcoder_installed(transcoder_application):
-    """ check for an installation of either ffmpeg or avconv """
-    try:
-        subprocess.check_output([transcoder_application, "-version"])
-        return True
-    except OSError:
-        return False
 

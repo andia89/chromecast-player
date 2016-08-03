@@ -8,14 +8,21 @@ import subprocess
 
 config = configparser.ConfigParser()
 configfile = '/home/andreas/.config/chromecast_player'
-default_vals = {'chromecast_player': {'automatic_connect': False, 'enable_web': False}}
+default_vals = {'chromecast_player': {'automatic_connect': False, 'enable_web': False, 'enable_transcoding': False, 'local_port': "", 'transcoding_options':"", "radio":""}}
 
 def get_config(section):
     config.read(configfile)
     dict1 = {}
     for option in default_vals[section].keys():
         try:
-            dict1[option] = (config.get(section, option) == 'True')
+            op = config.get(section, option)
+            if op == 'True' or op == 'False':
+                dict1[option] = (op == 'True')
+            else:
+                try:
+                    dict1[option] = int(op)
+                except:
+                    dict1[option] = op
         except:
             try:    
                 config.add_section(section)
@@ -48,6 +55,9 @@ class Preferences(Gtk.Window):
         config_chromecast = get_config('chromecast_player')
         vboxall = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         hboxbuttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        hboxradio = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        hboxport = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        hboxtrans = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         self.automatic_connect = Gtk.CheckButton(label=" Automatically connect to first available chromecast on startup")
         self.automatic_connect.set_active(config_chromecast['automatic_connect'])
@@ -57,8 +67,55 @@ class Preferences(Gtk.Window):
         self.enable_web.set_active(config_chromecast['enable_web'])
         self.enable_web.connect("toggled", self.config_changed, "enable_web")
         
+        self.enable_transcoding = Gtk.CheckButton(label=" Enables on the fly transcoding of unsupported filetypes")
+        self.enable_transcoding.set_active(config_chromecast['enable_transcoding'])
+        self.enable_transcoding.connect("toggled", self.config_changed, "enable_transcoding")
+        
+        radio_label = Gtk.Label()
+        radio_label.set_text("Preferred transcoder: ")
+        hboxradio.pack_start(radio_label, False, False, 0)
+        self.ffmpeg_button = Gtk.RadioButton.new_with_label_from_widget(None, "FFMPEG")
+        self.ffmpeg_button.connect("toggled", self.config_changed, "preferred_transcoder")
+        hboxradio.pack_start(self.ffmpeg_button, False, False, 10)
+        self.avconv_button = Gtk.RadioButton.new_with_label_from_widget(self.ffmpeg_button, "AVCONV")
+        self.avconv_button.connect("toggled", self.config_changed, "preferred_transcoder")
+        hboxradio.pack_start(self.avconv_button, False, False, 10)
+        
+        port_label = Gtk.Label()
+        port_label.set_text("Port for local files: ")
+        self.port_entry = Gtk.Entry()
+        try:
+            po = int(config_chromecast['local_port'])
+            self.port_entry.set_text(str(po))
+        except:
+            self.port_entry.set_text("")
+        self.port_entry.connect("changed", self.config_changed, "local_port")
+        self.port_entry.set_max_width_chars(5)
+        self.port_entry.set_width_chars(5)
+        hboxport.pack_start(port_label, False, False, 0)
+        hboxport.pack_start(self.port_entry, False, False, 20)
+        
+        transcoder_label = Gtk.Label()
+        transcoder_label.set_text("Options for transcoder: ")
+        self.transcoder_options = Gtk.Entry()
+        self.transcoder_options.set_max_width_chars(20)
+        self.transcoder_options.set_width_chars(20)
+        self.transcoder_options.connect("changed", self.config_changed, "transcoding_options")
+        self.transcoder_options.set_text(config_chromecast['transcoding_options'])
+        hboxtrans.pack_start(transcoder_label, False, False, 0)
+        hboxtrans.pack_start(self.transcoder_options, False, False, 20)
+        
+        if not self.enable_transcoding.get_active():
+            self.ffmpeg_button.set_sensitive(False)
+            self.avconv_button.set_sensitive(False)
+            self.transcoder_options.set_sensitive(False)
+
         vboxall.pack_start(self.automatic_connect, False, False, 20)
         vboxall.pack_start(self.enable_web, False, False, 20)
+        vboxall.pack_start(hboxport, False, False, 20)
+        vboxall.pack_start(self.enable_transcoding, False, False, 20)
+        vboxall.pack_start(hboxradio, False, False, 20)
+        vboxall.pack_start(hboxtrans, False, False, 20)
 
 
         #close = Gtk.Button("_Close", use_underline=True)
@@ -79,6 +136,14 @@ class Preferences(Gtk.Window):
         self.win.set_size_request(500,50)
         self.automatic_connect.set_margin_left(30)
         self.automatic_connect.set_margin_right(50)
+        self.enable_transcoding.set_margin_left(30)
+        self.enable_transcoding.set_margin_right(50)
+        hboxradio.set_margin_left(60)
+        hboxradio.set_margin_right(20)
+        hboxport.set_margin_left(30)
+        hboxport.set_margin_right(50)
+        hboxtrans.set_margin_left(60)
+        hboxtrans.set_margin_right(20)
         self.enable_web.set_margin_left(30)
         self.enable_web.set_margin_right(50)
         self.win.set_title('Preferences')
@@ -94,7 +159,12 @@ class Preferences(Gtk.Window):
         Gtk.main_quit()
 
     def config_changed(self, *args):
-        state = args[0].get_active()
+        if args[1] in ["enable_web", "enable_transcoding", "automatic_connect"]:
+            state = args[0].get_active()
+        elif args[1] == "preferred_transcoder":
+            state = 0
+        elif args[1] in ["local_port", "transcoding_options"]:
+            state = args[0].get_text()
         if args[1] == "enable_web" and state:
             state = self.check_youtube_dl()
             if not state:
@@ -105,6 +175,27 @@ class Preferences(Gtk.Window):
                 dialog.run()
                 dialog.destroy()
                 args[0].set_active(False)
+        elif args[1] == "enable_transcoding":
+            if state:
+                self.transcoder_options.set_sensitive(True)
+                self.ffmpeg_button.set_sensitive(True)
+                self.avconv_button.set_sensitive(True)
+            elif not state:
+                self.transcoder_options.set_sensitive(False)
+                self.ffmpeg_button.set_sensitive(False)
+                self.avconv_button.set_sensitive(False)
+        elif args[1] == "local_port":
+            try:
+                po = int(state)
+                self.port_entry.set_text(str(po))
+            except:
+                state = ""
+                self.port_entry.set_text(str(state))
+        elif args[1] == "preferred_transcoder":
+            if self.ffmpeg_button.get_active():
+                state = 'ffmpeg'
+            else:
+                state = 'avconv'
         set_config('chromecast_player', args[1], str(state))
     
     def check_youtube_dl(self):
