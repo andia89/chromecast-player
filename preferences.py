@@ -5,9 +5,10 @@ require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, Gio, GLib
 import configparser
 import subprocess
+import os
 
 config = configparser.ConfigParser()
-configfile = '/home/andreas/.config/chromecast_player'
+configfile = os.path.expanduser('~/.config/chromecast_player')
 default_vals = {'chromecast_player': {'automatic_connect': False, 'enable_web': False, 'enable_transcoding': False, 'local_port': "", 'transcoding_options':"", "preferred_transcoder":""}}
 
 def get_config(section):
