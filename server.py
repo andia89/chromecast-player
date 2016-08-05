@@ -36,7 +36,6 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     def send_headers(self, filepath):
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
-        self.send_header("Content-type", self.content_type)
         self.send_header("Content-length", str(os.path.getsize(filepath)))        
         self.end_headers()    
 
@@ -71,7 +70,6 @@ class TranscodingRequestHandler(RequestHandler):
     def send_headers(self, filepath):
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
-        self.send_header("Content-type", self.content_type)
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
 

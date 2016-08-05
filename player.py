@@ -420,8 +420,8 @@ class ChromecastPlayer(Gtk.Application):
             while self.serverthread.isAlive():
                 time.sleep(0.5)
         if self.play_uri[self.playlist_counter][1]:
-            url, mime = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
-            self.mc.play_media(url, mime)
+            url = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
+            self.mc.play_media(url, self.play_uri[self.playlist_counter][2])
         else:
             self.mc.play_media(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][2])
 
@@ -687,7 +687,7 @@ class ChromecastPlayer(Gtk.Application):
 
         url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
         
-        return url, req_handler.content_type
+        return url
 
 
     def get_active_chromecasts(self):
