@@ -21,6 +21,8 @@ You can pass uris (either local files or network streams) directly on the comman
 ./player.py /path/to/file1 www/a/stream
 ```
 
+You can select local files and hit `Play now` in the file-chooser dialog, to selected files immediately, or hit `Add to playlist` to append them to currently playing files/network streams. The same is true for network streams. 
+
 ##Acknowledgments
 The script relies heavily on [pychromecast](https://github.com/balloob/pychromecast) written by Paulus Schoutsen.
 
