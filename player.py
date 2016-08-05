@@ -422,6 +422,8 @@ class ChromecastPlayer(Gtk.Application):
         if self.serverthread:
             while self.serverthread.isAlive():
                 time.sleep(0.5)
+        while not self.is_idle:
+            time.sleep(0.5)
         if self.play_uri[self.playlist_counter][1]:
             url = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
             self.mc.play_media(url, self.play_uri[self.playlist_counter][2])
