@@ -151,7 +151,8 @@ class ChromecastPlayer(Gtk.Application):
                                 continue
                             else:
                                 self.get_network_uri(uri)
-                        self._on_play_clicked()
+                        if self.play_uri:
+                            self._on_play_clicked()
             else:
                 self.clients_combo.set_active(-1)
         else:
