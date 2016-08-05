@@ -298,14 +298,15 @@ class ChromecastPlayer(Gtk.Application):
                 for i,u in enumerate(ret[0]):
                     self.decode_local_uri(u)
                 self.mc.stop()
-                self._on_play_clicked()
+                if self.play_uri:
+                    self._on_play_clicked()
             else:
                 if self.overwrite:
                     self.play_uri = []
                     self.playlist_counter = 0
                 for i, u in enumerate(ret[0]):
                     self.decode_local_uri(u)
-                if self.overwrite or not playlist:
+                if self.overwrite or not playlist and self.play_uri:
                     self._on_play_clicked()
 
 
@@ -320,18 +321,19 @@ class ChromecastPlayer(Gtk.Application):
             if ret[1] == 1:
                 self.play_uri = []
                 self.playlist_counter = 0
-                thread = threading.Thread(target=self.get_network_uri, args=(ret,))
+                thread = threading.Thread(target=self.get_network_uri, args=(ret[0],))
                 thread.start()
                 while self.uri_working:
                     time.sleep(1)
-                self.mc.stop()
-                self._on_play_clicked()
+                if self.play_uri:
+                    self.mc.stop()
+                    self._on_play_clicked()
             else:
-                thread = threading.Thread(target=self.get_network_uri, args=(ret,))
+                thread = threading.Thread(target=self.get_network_uri, args=(ret[0],))
                 thread.start()
                 while self.uri_working:
                     time.sleep(1)
-                if not playlist:
+                if not playlist and self.play_uri:
                     self._on_play_clicked()
 
 
@@ -553,6 +555,8 @@ class ChromecastPlayer(Gtk.Application):
                 self.stop.set_sensitive(True)
                 self.volume.set_sensitive(True)
                 self.play.set_sensitive(False)
+                if self.mc.status.title:
+                    self.win.set_title()    
                 if not self.volume_changing:
                     self.volume.handler_block_by_func(self.volume_changed)
                     self.volume.set_value(self.mc.status.volume_level)
@@ -603,6 +607,7 @@ class ChromecastPlayer(Gtk.Application):
                 self.progressbar.set_value(0.)
                 self.progressbar.handler_unblock_by_func(self.slider_changed)
                 self.pause.set_sensitive(False)
+                self.win.set_title("Chromecast Player")
                 if self.continue_playing and self.mc.status.idle_reason == 'FINISHED':
                     print("test")
                     self._on_next_clicked()
@@ -613,6 +618,7 @@ class ChromecastPlayer(Gtk.Application):
                 self.is_paused = False
                 self.is_idle = False
                 self.is_disconnected = False
+                self.win.set_title("Chromecast Player")
                 self.label.set_label("0:00/0:00")
                 self.stop.set_sensitive(False)
                 self.pause.set_sensitive(False)
@@ -635,6 +641,7 @@ class ChromecastPlayer(Gtk.Application):
             self.is_paused = False
             self.is_idle = False
             self.is_disconnected = True
+            self.win.set_title("Chromecast Player")
             self.disconnect.set_sensitive(False)
             self.label.set_label("00:00/00:00")
             self.pause.set_sensitive(False)
