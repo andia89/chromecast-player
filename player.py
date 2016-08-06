@@ -551,7 +551,8 @@ class ChromecastPlayer(Gtk.Application):
                     curr = self.mc.status.current_time
                     dur = self.mc.status.duration
                     self.progressbar.handler_block_by_func(self.slider_changed)
-                    self.progressbar.set_value(curr/dur)
+                    if dur and curr:
+                        self.progressbar.set_value(curr/dur)
                     self.progressbar.handler_unblock_by_func(self.slider_changed)
                     self.label.set_label("%02d:%02d/%02d:%02d"%(int(curr/60), int(curr%60), int(dur/60), int(dur%60)))
                 self.pause.set_sensitive(True)
@@ -559,7 +560,7 @@ class ChromecastPlayer(Gtk.Application):
                 self.volume.set_sensitive(True)
                 self.play.set_sensitive(False)
                 if self.mc.status.title:
-                    self.win.set_title()    
+                    self.win.set_title(self.mc.status.title)    
                 if not self.volume_changing:
                     self.volume.handler_block_by_func(self.volume_changed)
                     self.volume.set_value(self.mc.status.volume_level)
@@ -580,6 +581,8 @@ class ChromecastPlayer(Gtk.Application):
                 self.pause.set_sensitive(False)
                 self.play.set_sensitive(True)
                 self.volume.set_sensitive(True)
+                if self.mc.status.title:
+                    self.win.set_title(self.mc.status.title)
                 if not self.volume_changing:
                     self.volume.handler_block_by_func(self.volume_changed)
                     self.volume.set_value(self.mc.status.volume_level)
