@@ -2,6 +2,8 @@
 
 Chromecast-player written using Python3.x and PyGTK. The player allows you to play local files from your computer and network streams which are parsed using `youtube-dl`. The player supports playlists, changing volume, connecting to different chromecasts, and on the fly conversion of local files (using ffmpeg or avconv) with media types not supported by chromecast.
 
+The app also detects metadata and thumbnails of local files send to the chromecast, and displays these informations on your TV. 
+
 ### NOTE: This is still a very early beta, so there will be bugs!!! Feel free to report them here :)
 
 ##Dependencies
