@@ -10,6 +10,7 @@ import preferences
 import threading
 import subprocess
 import mimetypes
+import re
 import server as local_server
 import time
 import json
@@ -20,6 +21,7 @@ import socket
 FFMPEG = 'ffmpeg -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
 AVCONV = 'avconv -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
 
+supported_picture_formats = {'mjpeg': 'jpg', 'png':'png', 'jpeg':'jpg','jpg':'jpg', 'gif':'gif', 'webp':'webp'}
 supported_formats = {'mp4':('video/mp4', 0), 'webm':('video/webm', 1), 'ogg':('audio/ogg', 2), 'flac':("audio/flac", 1.5),'flac':("audio/x-flac", 1.6), 'mp3':('audio/mpeg', 3), 'wav':('audio/wav', 4)}
 
 class ChromecastPlayer(Gtk.Application):
@@ -366,10 +368,10 @@ class ChromecastPlayer(Gtk.Application):
         if not chromecast_config['enable_transcoding']:
             self.transcoder = None
             self.probe = None
-        self.transcoder = chromecast_config['enable_transcoding']
         self.preferred_transcoder = chromecast_config["preferred_transcoder"]
         self.local_port = chromecast_config["local_port"]
         self.transcoder, self.probe = get_transcoder_cmds(preferred_transcoder=self.preferred_transcoder)
+        self.transcoder = chromecast_config['enable_transcoding']
 
 
     def combo_changed_clients(self, widget):
@@ -422,11 +424,9 @@ class ChromecastPlayer(Gtk.Application):
         if self.serverthread:
             while self.serverthread.isAlive():
                 time.sleep(0.5)
-        while self.is_playing or self.is_paused:
-            time.sleep(0.5)
         if self.play_uri[self.playlist_counter][1]:
             url = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
-            self.mc.play_media(url, self.play_uri[self.playlist_counter][2])
+            self.mc.play_media(url, self.play_uri[self.playlist_counter][2], metadata=self.play_uri[self.playlist_counter][4], thumb=self.play_uri[self.playlist_counter][5])
         else:
             self.mc.play_media(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][2])
 
@@ -495,8 +495,11 @@ class ChromecastPlayer(Gtk.Application):
         for k in supported_formats.keys():
             if mime == supported_formats[k][0]:
                 transcode = False
+        metadata = None
+        thumb = None
         if os.path.exists(url):
-            self.play_uri.append((url, True, mime, transcode and self.transcoder))
+            metadata, thumb = self.get_metadata(url, mime)
+            self.play_uri.append((url, True, mime, transcode and self.transcoder, metadata, thumb))
             return True
         else:
             return False
@@ -527,7 +530,7 @@ class ChromecastPlayer(Gtk.Application):
                 url = dicti['url']
                 mime = supported_formats[dicti['ext']][0]
             if url:
-                self.play_uri.append((url, False, mime, False))
+                self.play_uri.append((url, False, mime, False, None, None))
         except Exception as e:
             pass
         self.uri_working = False
@@ -615,7 +618,6 @@ class ChromecastPlayer(Gtk.Application):
                 self.pause.set_sensitive(False)
                 self.win.set_title("Chromecast Player")
                 if self.continue_playing and self.mc.status.idle_reason == 'FINISHED':
-                    print("test")
                     self._on_next_clicked()
                 if self.play_uri and not (self.continue_playing and self.mc.status.idle_reason == 'FINISHED'):
                     self.play.set_sensitive(True)
@@ -702,6 +704,93 @@ class ChromecastPlayer(Gtk.Application):
         
         return url
 
+    def get_metadata(self, filename, mime):
+        """ get metadata from local files, including thumbnails """
+        trans, probe = get_transcoder_cmds(preferred_transcoder=self.preferred_transcoder)
+        if not probe:
+            return None, None
+        if mime.startswith("audio/"):
+            metadata = {'metadataType':3}
+            proc = subprocess.Popen([probe, '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            ret = proc.communicate()
+            ret = ret[0].decode('utf-8')
+            info = json.loads(ret)
+            thumb = None
+            if info['format']['tags']:
+                for line in info['format']['tags']:
+                    if re.search('title', line, re.IGNORECASE):
+                        metadata['title'] = info['format']['tags'][line]
+                    elif re.search('album', line, re.IGNORECASE):
+                        metadata['albumName'] = info['format']['tags'][line]
+                    elif re.search('album artist', line, re.IGNORECASE) or re.search('albumartist', line, re.IGNORECASE):
+                        metadata['albumArtist'] = info['format']['tags'][line]
+                    elif re.search('artist', line, re.IGNORECASE):
+                        metadata['artist'] = info['format']['tags'][line]
+                    elif re.search('composer', line, re.IGNORECASE):
+                        metadata['composer'] = info['format']['tags'][line]
+                    elif re.search('track ', line, re.IGNORECASE):
+                        try:
+                            track = line.split("/")[0]
+                            metadata['trackNumber'] = int(track.lstrip("0"))
+                        except:
+                            pass
+                    elif re.search('disc', line, re.IGNORECASE):
+                        try:
+                            disc = line.split("/")[0]
+                            metadata['discNumber'] = int(disc.lstrip("0"))
+                        except:
+                            pass
+            cover_str = None
+            if len(info['streams']) > 1:
+                if info['streams'][0]['codec_type'] == 'video':
+                    cover_str = 0
+                elif info['streams'][1]['codec_type'] == 'video':
+                    cover_str = 1
+            if cover_str and info['streams'][cover_str]['tags']['comment']:
+                if info['streams'][cover_str]['tags']['comment'] == 'Cover (front)':
+                    if info['streams'][cover_str]['codec_name'] in supported_picture_formats.keys():
+                        proc = subprocess.Popen([trans, '-i', filename, '-v', 'quiet', '-vcodec', 'copy', '-f', info['streams'][cover_str]['codec_name'], 'pipe:1'], stdout=subprocess.PIPE)
+                        t = proc.communicate()[0]
+            return metadata, thumb
+        elif mime.startswith("video/"):
+            return None, None
+
+    def local_thumb(self, filename):
+        """ upload thumbnail to simple http server"""
+
+        if os.path.isfile(filename):
+            filename = os.path.abspath(filename)
+        else:
+            return None
+
+        mimetype = get_mimetype(filename, self.probe)
+        webserver_ip =[(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+        
+        req_handler = local_server.RequestHandler
+
+        if transcode:
+            if transcoder == "ffmpeg":  
+                req_handler = local_server.TranscodingRequestHandler
+                req_handler.transcoder_command = FFMPEG
+            elif transcoder == "avconv":   
+                req_handler = local_server.TranscodingRequestHandler
+                req_handler.transcoder_command = AVCONV
+            
+            if transcode_options is not None:    
+                req_handler.transcode_options = transcode_options
+
+        # create a webserver to handle a single request on a free port or a specific port if passed in the parameter   
+        port = 0    
+        if server_port is not None:
+            port = int(server_port)
+            
+        server = http.server.HTTPServer((webserver_ip, port), req_handler)
+        self.serverthread = threading.Thread(target=server.handle_request)
+        self.serverthread.start()    
+
+        url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
+        
+        return url
 
     def get_active_chromecasts(self):
         casts = list(pyc.get_chromecasts_as_dict().keys())
