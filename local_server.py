@@ -20,6 +20,15 @@ import select
 FFMPEG = 'ffmpeg -i "%s" -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
 AVCONV = 'avconv -i "%s" -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
 
+class ImageRequestHandler(http.server.BaseHTTPRequestHandler):
+    content_type = "image/png"
+    content = b""
+    
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", self.content_type)
+        self.wfile.write(self.content)
+        return
 
 
 class RequestHandler(http.server.BaseHTTPRequestHandler):
@@ -42,7 +51,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
     def write_response(self, filepath):
         with open(filepath, "br") as f: 
-            self.wfile.write(f.read())    
+            self.wfile.write(f.read())
 
 
 class TranscodingRequestHandler(RequestHandler):
