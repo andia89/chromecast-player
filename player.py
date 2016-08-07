@@ -42,6 +42,7 @@ class ChromecastPlayer(Gtk.Application):
         self.serverthread = None
         self.local_port = 0
         self.show_gui = show_gui
+        self.imagethread = None
         self.transcode_options = None
         if uri and not isinstance(uri, (list, tuple)):
             self.uri = [uri]
@@ -429,8 +430,9 @@ class ChromecastPlayer(Gtk.Application):
             thumb = self.play_uri[self.playlist_counter][5]
             image_url = None
             if thumb:
-                while self.imagethread.isAlive():
-                    time.sleep(0.5)
+                if self.imagethread:
+                    while self.imagethread.isAlive():
+                        time.sleep(0.5)
                 image_url = self.local_thumb(thumb, self.play_uri[self.playlist_counter][6])
             self.mc.play_media(url, self.play_uri[self.playlist_counter][2], metadata=self.play_uri[self.playlist_counter][4], thumb=image_url)
         else:
