@@ -6,20 +6,7 @@ from stream_select import FileChooserWindow, NetworkStream
 
 class PlaylistManager(Gtk.Window):
     def __init__(self, playlist, enable_web, transcoder, probe, preferred_transcoder):
-        parent = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-        self.win = Gtk.Dialog("My dialog",
-                   parent,
-                   Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                   ()
-             )
-        okbutton = self.win.add_button('Close', Gtk.ResponseType.OK)
-        okbutton.connect("clicked", self.exit)
-
-        filebutton = self.win.add_button('Open', Gtk.ResponseType.OK)
-        filebutton.connect('clicked', self._on_file_clicked)
-
-        netbutton = self.win.add_button('Open network stream', Gtk.ResponseType.OK)
-        netbutton.connect('clicked', self._on_net_stream_clicked)
+        self.win = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
 
         theme = Gtk.IconTheme.get_default()
         self.playimage = theme.load_icon("media-playback-start", 16,0)
@@ -48,40 +35,57 @@ class PlaylistManager(Gtk.Window):
 
     def main(self):
         self.win.set_title("Manage playlist")
+        vboxall = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        vboxmanager = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        hboxbuttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+
+
+        filebutton = Gtk.Button('_Open', use_underline=True)
+        filebutton.connect('clicked', self._on_file_clicked)
+
+        self.netbutton = Gtk.Button('_Open network stream', use_underline=True)
+        self.netbutton.connect('clicked', self._on_net_stream_clicked)
+
+        okbutton = Gtk.Button('_Close', use_underline=True)
+        okbutton.connect("clicked", self.exit)
+
         mainmenu = Gtk.Menu()
         filem = Gtk.MenuItem("Open")
-        mainmenu.append(filem)
         self.streamm = Gtk.MenuItem("Open network stream")
-        mainmenu.append(self.streamm)
         if not self.enable_web:
             self.streamm.set_sensitive(False)
-
         exit = Gtk.MenuItem("Close")
-
-        mainmenu.append(exit)
-
         root_menu = Gtk.MenuItem('File')
         root_menu.set_submenu(mainmenu)
-
         menu_bar = Gtk.MenuBar()
+        mainmenu.append(filem)
+        mainmenu.append(self.streamm)
+        mainmenu.append(exit)
         menu_bar.append(root_menu)
 
         sw = Gtk.ScrolledWindow()
         sw.set_shadow_type(Gtk.ShadowType.IN)
         sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        self.win.set_size_request(1200, 700)
-        content_area = self.win.get_content_area()
-        
-        content_area.pack_start(menu_bar, False, False, 2)
-        content_area.pack_start(sw, True, True, 10)
         self.treeView = Gtk.TreeView(self.store)
-        exit.connect("activate", self.exit)
         self.create_columns(self.treeView)
         sw.add(self.treeView)
+        
+        okbutton.set_margin_right(10)
+        filebutton.set_margin_left(10)
+        hboxbuttons.pack_start(filebutton, False, False, 0)
+        hboxbuttons.pack_start(self.netbutton, False, False, 10)
+        hboxbuttons.pack_end(okbutton, False, False, 0)
+        vboxmanager.pack_start(sw, True, True, 0)
+        vboxall.pack_start(vboxmanager, True, True, 0)
+        vboxall.pack_end(hboxbuttons, False, False, 10)
+        vboxall.pack_start(menu_bar, False, False, 0)
 
         filem.connect('activate', self._on_file_clicked)
         self.streamm.connect('activate', self._on_net_stream_clicked)
+        exit.connect("activate", self.exit)
 
+        self.win.set_size_request(1200, 700)
+        self.win.add(vboxall)
         self.win.show_all()
         GLib.timeout_add(500, self._playlist_counter_watch)
 
