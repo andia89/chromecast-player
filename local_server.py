@@ -20,6 +20,7 @@ import select
 FFMPEG = 'ffmpeg -i "%s" -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
 AVCONV = 'avconv -i "%s" -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
 
+
 class ImageRequestHandler(http.server.BaseHTTPRequestHandler):
     content_type = "image/png"
     content = b""
@@ -28,6 +29,20 @@ class ImageRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", self.content_type)
         self.wfile.write(self.content)
+        return
+
+
+class SubtitleRequestHandler(http.server.BaseHTTPRequestHandler):
+    content = b""
+    
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.protocol_version = "HTTP/1.1"
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.wfile.write(self.content)
+        self.end_headers()
         return
 
 
@@ -45,8 +60,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     def send_headers(self, filepath):
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
-        self.send_header("Content-length", str(os.path.getsize(filepath)))        
-        self.end_headers()    
+        self.send_header("Content-length", str(os.path.getsize(filepath)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
 
 
     def write_response(self, filepath):
@@ -80,5 +96,6 @@ class TranscodingRequestHandler(RequestHandler):
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
         self.send_header("Transfer-Encoding", "chunked")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
