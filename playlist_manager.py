@@ -5,23 +5,32 @@ from stream_select import FileChooserWindow, NetworkStream
 
 
 class PlaylistManager(Gtk.Window):
-    def __init__(self, playlist, enable_web, transcoder, probe, preferred_transcoder):
+    def __init__(self, playlist, enable_web, transcoder, probe, preferred_transcoder, counter):
         self.win = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
 
         theme = Gtk.IconTheme.get_default()
         self.playimage = theme.load_icon("media-playback-start", 16,0)
         self.store = Gtk.ListStore(GdkPixbuf.Pixbuf, str, str, int, int, str, str, str, str)
+        self.selection_index = None 
         self.create_model(playlist)
+        if counter:
+            self.store[counter][0] = self.playimage
         self.playlist_counter = None
-        self.play_now = True
+        self.play_now = False
         self.playlist_changed = False
+        self.playlist_counter_changed = False
+        self.double_clicked = False
         self.transcoder = transcoder
+        self.number_clicked = 0
         self.probe = probe
         self.preferred_transcoder = preferred_transcoder
         self.enable_web = enable_web
+        self.show_image = True
+
 
     def exit(self, *args):
         self.win.close()
+
 
     def check_uris(self, play_uri):
         uri_win = []
@@ -33,18 +42,43 @@ class PlaylistManager(Gtk.Window):
         if uri_win != player_uri:
             self.create_model(play_uri)
 
+
     def main(self):
         self.win.set_title("Manage playlist")
         vboxall = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         vboxmanager = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         hboxbuttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
-
         filebutton = Gtk.Button('_Open', use_underline=True)
         filebutton.connect('clicked', self._on_file_clicked)
 
         self.netbutton = Gtk.Button('_Open network stream', use_underline=True)
         self.netbutton.connect('clicked', self._on_net_stream_clicked)
+
+        deletebutton = Gtk.Button()
+        deleteButtonImage = Gtk.Image()
+        deleteButtonImage.set_from_stock(Gtk.STOCK_REMOVE, Gtk.IconSize.BUTTON)
+        deletebutton.add(deleteButtonImage)
+
+        topbutton = Gtk.Button()
+        topButtonImage = Gtk.Image()
+        topButtonImage.set_from_stock(Gtk.STOCK_GOTO_TOP, Gtk.IconSize.BUTTON)
+        topbutton.add(topButtonImage)
+
+        upbutton = Gtk.Button()
+        upButtonImage = Gtk.Image()
+        upButtonImage.set_from_stock(Gtk.STOCK_GO_UP, Gtk.IconSize.BUTTON)
+        upbutton.add(upButtonImage)
+
+        bottombutton = Gtk.Button()
+        bottomButtonImage = Gtk.Image()
+        bottomButtonImage.set_from_stock(Gtk.STOCK_GOTO_BOTTOM, Gtk.IconSize.BUTTON)
+        bottombutton.add(bottomButtonImage)
+
+        downbutton = Gtk.Button()
+        downButtonImage = Gtk.Image()
+        downButtonImage.set_from_stock(Gtk.STOCK_GO_DOWN, Gtk.IconSize.BUTTON)
+        downbutton.add(downButtonImage)
 
         okbutton = Gtk.Button('_Close', use_underline=True)
         okbutton.connect("clicked", self.exit)
@@ -72,14 +106,25 @@ class PlaylistManager(Gtk.Window):
         
         okbutton.set_margin_right(10)
         filebutton.set_margin_left(10)
+        deletebutton.set_margin_left(200)
         hboxbuttons.pack_start(filebutton, False, False, 0)
         hboxbuttons.pack_start(self.netbutton, False, False, 10)
+        hboxbuttons.pack_start(deletebutton, False, False, 0)
+        hboxbuttons.pack_start(bottombutton, False, False, 10)
+        hboxbuttons.pack_start(downbutton, False, False, 0)
+        hboxbuttons.pack_start(upbutton, False, False, 10)
+        hboxbuttons.pack_start(topbutton, False, False, 0)
         hboxbuttons.pack_end(okbutton, False, False, 0)
         vboxmanager.pack_start(sw, True, True, 0)
         vboxall.pack_start(vboxmanager, True, True, 0)
         vboxall.pack_end(hboxbuttons, False, False, 10)
         vboxall.pack_start(menu_bar, False, False, 0)
 
+        deletebutton.connect("clicked", self._on_delete_clicked)
+        upbutton.connect("clicked", self._on_up_clicked)
+        downbutton.connect("clicked", self._on_down_clicked)
+        topbutton.connect("clicked", self._on_top_clicked)
+        bottombutton.connect("clicked", self._on_bottom_clicked)
         filem.connect('activate', self._on_file_clicked)
         self.streamm.connect('activate', self._on_net_stream_clicked)
         exit.connect("activate", self.exit)
@@ -87,8 +132,129 @@ class PlaylistManager(Gtk.Window):
         self.win.set_size_request(1200, 700)
         self.win.add(vboxall)
         self.win.show_all()
-        GLib.timeout_add(500, self._playlist_counter_watch)
 
+
+    def _on_delete_clicked(self, *args):
+        if len(self.store) == 1:
+            self.play_uri = []
+            self.delete_at_index(0)
+            self.playlist_changed = True
+            return
+        index = self.get_selected_index()
+        if self.playlist_counter is not None:
+            plc = self.playlist_counter + self.number_clicked
+            if plc == index and self.show_image:
+                self.number_clicked += -1
+                self.playlist_counter_changed = True
+            elif index < plc:
+                self.number_clicked += -1
+                self.playlist_counter_changed = True
+        self.delete_at_index(index)
+        if plc == index and self.show_image:
+            self.show_image = False
+            self.store[index][0] = None
+        self.selection_index = index - 1
+        popped = self.play_uri.pop(index)
+        self.playlist_changed = True
+
+
+    def _on_up_clicked(self, *args):
+        index = self.get_selected_index()
+        if self.playlist_counter is not None:
+            plc = self.playlist_counter + self.number_clicked
+        else:
+            plc = None
+        if not index == 0:
+            if self.playlist_counter is not None:
+                if plc == index:
+                    self.number_clicked += -1
+                    self.playlist_counter_changed = True
+                elif plc == index - 1:
+                    self.number_clicked += 1
+                    self.playlist_counter_changed = True
+            self.move_item_up()
+            if plc == index:
+                self.store[index][0] = None
+                self.store[index-1][0] = self.playimage
+            elif plc == index - 1:
+                self.store[index-1][0] = None
+                self.store[index][0] = self.playimage
+            self.selection_index = index - 1
+            popped = self.play_uri.pop(index)
+            self.play_uri.insert(index-1, popped)
+            self.playlist_changed = True
+            
+
+    def _on_down_clicked(self, *args):
+        index = self.get_selected_index()
+        if not index == len(self.play_uri)-1:
+            if self.playlist_counter:
+                if self.playlist_counter == index:
+                    self.counter = self.playlist_counter + 1
+                    self.playlist_counter_changed = True
+                elif self.playlist_counter == index + 1:
+                    self.counter = self.playlist_counter - 1
+                    self.playlist_counter_changed = True
+            self.move_item_down()
+            self.selection_index = index + 1
+            popped = self.play_uri.pop(index)
+            self.play_uri.insert(index+1, popped)
+            self.playlist_changed = True
+
+
+    def _on_top_clicked(self, *args):
+        index = self.get_selected_index()
+        if self.playlist_counter is not None:
+            plc = self.playlist_counter + self.number_clicked
+        else:
+            plc = None
+        if not index == 0:
+            if self.playlist_counter is not None:
+                if plc == index:
+                    self.number_clicked += -plc
+                    self.playlist_counter_changed = True
+                elif index > plc:
+                    self.number_clicked += 1
+                    self.playlist_counter_changed = True
+            self.move_item_top()
+            if plc == index:
+                self.store[plc][0] = None
+                self.store[0][0] = self.playimage
+            elif index > plc:
+                self.store[plc][0] = None
+                self.store[plc+1][0] = self.playimage
+            self.selection_index = 0
+            popped = self.play_uri.pop(index)
+            self.play_uri.insert(0, popped)
+            self.playlist_changed = True
+
+
+    def _on_bottom_clicked(self, *args):
+        index = self.get_selected_index()
+        if self.playlist_counter is not None:
+            plc = self.playlist_counter + self.number_clicked
+        else:
+            plc = None
+        if not index == len(self.store)-1:
+            if self.playlist_counter is not None:
+                if plc == index:
+                    self.number_clicked += len(self.store) - plc - 1
+                    self.playlist_counter_changed = True 
+                elif index < plc:
+                    self.number_clicked += -1
+                    self.playlist_counter_changed = True
+            self.move_item_bottom()
+            if plc == index:
+                self.store[plc][0] = None
+                self.store[len(self.store)-1][0] = self.playimage
+            elif index < plc:
+                self.store[plc][0] = None
+                self.store[plc-1][0] = self.playimage
+            self.selection_index = len(self.store)-1
+            popped = self.play_uri.pop(0)
+            self.play_uri.append(popped)
+            self.playlist_changed = True
+        
     
     def _on_file_clicked(self, *args):
         win = FileChooserWindow()
@@ -124,22 +290,15 @@ class PlaylistManager(Gtk.Window):
             self.playlist_changed = True
 
 
-    def _playlist_counter_watch(self):
-        if not self.win.is_visible():
-            return False
-        for row in self.store:
-            row[0] = None
-        if self.playlist_counter is not None:
-            self.store[self.playlist_counter][0] = self.playimage
-        return True
-        
-
     def create_model(self, playlist):
         self.store.clear()
         self.play_uri = playlist[:]
         if playlist:
             for k in playlist:
                 self.store.append([None] + self.add_to_playlist(k))
+            if self.selection_index:
+                self.treeView.set_cursor(self.selection_index)
+                self.selection_index = None
 
 
     def create_columns(self, treeView):
@@ -213,6 +372,53 @@ class PlaylistManager(Gtk.Window):
         column.set_resizable(True)
         treeView.append_column(column)
 
+
+    def get_selected_index(self):
+        sel = self.treeView.get_selection()
+        model, i = sel.get_selected()
+        res = model[i].path.get_indices()
+        return res[0]
+
+
+    def delete_at_index(self, index):
+        for row in self.store:
+            if row.path.get_indices()[0] == index:
+                self.store.remove(row.iter)
+                break
+
+
+    def move_item_down(self):
+        selection = self.treeView.get_selection()
+        selections, model = selection.get_selected_rows()
+        for row in selections:
+            if selection.iter_is_selected(row.iter) and row.next:
+                self.store.swap(row.iter, row.next.iter)
+
+
+    def move_item_up(self):
+        selection = self.treeView.get_selection()
+        selections, model = selection.get_selected_rows()
+        for row in selections:
+            if selection.iter_is_selected(row.iter) and row.previous:
+                self.store.swap(row.iter, row.previous.iter)
+
+
+    def move_item_top(self):
+        selection = self.treeView.get_selection()
+        selections, model = selection.get_selected_rows()
+        for row in selections:
+            if selection.iter_is_selected(row.iter):
+                self.store.move_after(row.iter)
+
+
+    def move_item_bottom(self):
+        selection = self.treeView.get_selection()
+        selections, model = selection.get_selected_rows()
+        for row in selections:
+            if selection.iter_is_selected(row.iter):
+                self.store.move_before(row.iter)
+
+
     def add_to_playlist(self, data):
         uri = data[0]
         metadata = data[4]
@@ -222,7 +428,7 @@ class PlaylistManager(Gtk.Window):
         albumartist = None
         composer = None
         track = None
-        cdnumber = None         
+        cdnumber = None
         if metadata:
             if 'title' in metadata.keys():
                 title = metadata['title']

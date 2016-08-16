@@ -61,6 +61,9 @@ class ChromecastPlayer(Gtk.Application):
 
 
     def exit(self, *args):
+        if self.playlist_manager:
+            if self.playlist_manager.win.is_visible():
+                self.playlist_manager.win.close()
         self.win.close()
         self.stop_worker = True
         self.quit()
@@ -283,6 +286,8 @@ class ChromecastPlayer(Gtk.Application):
             self.cast.disconnect()
         self.clients_combo.set_active(-1)
         self.play_uri = []
+        if self.playlist_manager:
+            self.playlist_manager.check_uris(self.play_uri)
 
 
     def _on_play_clicked(self, *args):
@@ -306,9 +311,11 @@ class ChromecastPlayer(Gtk.Application):
                 self.mc.stop()
                 if self.serverthread:
                     while self.serverthread.isAlive():
-                        time.sleep(0.5)
+                        self.serverthread.join()
         self.playlist_counter = 0
         self.play_uri = []
+        if self.playlist_manager:
+            self.playlist_manager.check_uris(self.play_uri)
         self.continue_playing = False
 
 
@@ -384,7 +391,8 @@ class ChromecastPlayer(Gtk.Application):
 
 
     def _on_playlist_clicked(self, *args):
-        self.playlist_manager = playlist_manager.PlaylistManager(self.play_uri, self.enable_web, self.transcoder, self.probe, self.preferred_transcoder)
+        counter = self.playlist_counter if self.is_playing or self.is_paused else None
+        self.playlist_manager = playlist_manager.PlaylistManager(self.play_uri, self.enable_web, self.transcoder, self.probe, self.preferred_transcoder, counter)
         self.playlist_manager.main()
         GLib.timeout_add(500,self._playlist_watcher)
 
@@ -403,6 +411,23 @@ class ChromecastPlayer(Gtk.Application):
                 if self.mc:
                     self.mc.stop()
                     self._on_play_clicked()
+        if self.playlist_manager.playlist_counter_changed:
+            self.playlist_counter += self.playlist_manager.number_clicked
+            self.playlist_manager.playlist_counter = self.playlist_counter
+            self.playlist_manager.playlist_counter_changed = False
+            self.playlist_manager.number_clicked = 0
+        else:
+            for row in self.playlist_manager.store:
+                row[0] = None
+            if self.playlist_manager.show_image:
+                if self.playlist_manager.playlist_counter is not None:
+                    self.playlist_manager.store[self.playlist_manager.playlist_counter][0] = self.playlist_manager.playimage
+        if self.playlist_manager.double_clicked:
+            if self.mc:
+                self.mc.stop()
+                self._on_play_clicked()
+            self.playlist_manager.show_image = True
+            self.playlist_manager.double_clicked = False
         return True
 
 
@@ -429,6 +454,8 @@ class ChromecastPlayer(Gtk.Application):
 
     def _on_next_clicked(self, *args):
         self.play.set_sensitive(False)
+        if self.playlist_manager:
+            self.playlist_manager.show_image = True
         if self.cast and self.cast.status:
             if self.continue_playing and (self.playlist_counter + 1) < len(self.play_uri):
                 self.playlist_counter += 1
@@ -440,7 +467,7 @@ class ChromecastPlayer(Gtk.Application):
                 self.mc.stop()
                 if self.serverthread:
                     while self.serverthread.isAlive():
-                        time.sleep(0.5)
+                        self.serverthread.join()
 
 
     def _on_prev_clicked(self, *args):
@@ -537,7 +564,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.next.set_sensitive(True)
                 else:
                     self.next.set_sensitive(False)
-                if self.mc.status.supports_skip_backward or (self.playlist_counter != 0):
+                if self.play_uri and (self.mc.status.supports_skip_backward or (self.playlist_counter != 0)):
                     self.prev.set_sensitive(True)
                 else:
                     self.prev.set_sensitive(False)
@@ -562,7 +589,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.next.set_sensitive(True)
                 else:
                     self.next.set_sensitive(False)
-                if self.mc.status.supports_skip_backward or (self.playlist_counter != 0):
+                if self.play_uri and (self.mc.status.supports_skip_backward or (self.playlist_counter != 0)):
                     self.prev.set_sensitive(True)
                 else:
                     self.prev.set_sensitive(False)
@@ -592,6 +619,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.play.set_sensitive(True)
                 if self.playlist_manager:
                     self.playlist_manager.playlist_counter = None
+                    self.playlist_manager.show_image = True
             else:
                 self.is_playing = False
                 self.is_paused = False
@@ -616,6 +644,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.play.set_sensitive(False)
                 if self.playlist_manager:
                     self.playlist_manager.playlist_counter = None
+                    self.playlist_manager.show_image = True
         else:
             self.continue_playing = False
             self.is_playing = False
@@ -638,7 +667,8 @@ class ChromecastPlayer(Gtk.Application):
             self.progressbar.handler_unblock_by_func(self._slider_changed)
             self.play.set_sensitive(False)
             if self.playlist_manager:
-                    self.playlist_manager.playlist_counter = None
+                self.playlist_manager.playlist_counter = None
+                self.playlist_manager.show_image = True
         return True 
 
 
@@ -660,7 +690,7 @@ class ChromecastPlayer(Gtk.Application):
         self.cast.wait()
         if self.serverthread:
             while self.serverthread.isAlive():
-                time.sleep(0.5)
+                self.serverthread.join()
         if self.play_uri[self.playlist_counter][1]:
             url = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
             thumb = self.play_uri[self.playlist_counter][5]
@@ -668,7 +698,7 @@ class ChromecastPlayer(Gtk.Application):
             if thumb:
                 if self.imagethread:
                     while self.imagethread.isAlive():
-                        time.sleep(0.5)
+                        self.imagethread.join()
                 image_url = self.local_thumb(thumb, self.play_uri[self.playlist_counter][6])
             self.mc.play_media(url, self.play_uri[self.playlist_counter][2], metadata=self.play_uri[self.playlist_counter][4], thumb=image_url)
         else:

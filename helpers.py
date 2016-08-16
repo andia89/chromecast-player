@@ -190,15 +190,15 @@ def get_metadata(filename, mime, preferred_transcoder):
                     metadata['artist'] = info['format']['tags'][line]
                 elif re.search('composer', line, re.IGNORECASE):
                     metadata['composer'] = info['format']['tags'][line]
-                elif re.search('track ', line, re.IGNORECASE):
+                elif re.search('track', line, re.IGNORECASE):
                     try:
-                        track = line.split("/")[0]
+                        track = info['format']['tags'][line].split("/")[0]
                         metadata['trackNumber'] = int(track.lstrip("0"))
                     except:
                         pass
                 elif re.search('disc', line, re.IGNORECASE):
                     try:
-                        disc = line.split("/")[0]
+                        disc = info['format']['tags'][line].split("/")[0]
                         metadata['discNumber'] = int(disc.lstrip("0"))
                     except:
                         pass
