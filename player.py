@@ -415,6 +415,10 @@ class ChromecastPlayer(Gtk.Application):
             self.playlist_counter += self.playlist_manager.number_clicked
             self.playlist_manager.playlist_counter = self.playlist_counter
             self.playlist_manager.number_clicked = 0
+        elif self.playlist_manager.sorted_index is not None:
+            self.playlist_counter = self.playlist_manager.sorted_index
+            self.playlist_manager.playlist_counter = self.playlist_counter
+            self.playlist_manager.sorted_index = None
         else:
             for row in self.playlist_manager.store:
                 row[0] = None
@@ -422,11 +426,10 @@ class ChromecastPlayer(Gtk.Application):
                 if self.playlist_manager.playlist_counter is not None:
                     self.playlist_manager.store[self.playlist_manager.playlist_counter][0] = self.playlist_manager.playimage
         if self.playlist_manager.double_clicked:
+            self.playlist_counter = self.playlist_manager.double_clicked_index
             if self.mc:
-                self.mc.stop()
                 self._on_play_clicked()
-            self.playlist_counter = self.playlist_manager.playlist_counter
-            self.playlist_manager.show_image = True
+                self.playlist_manager.show_image = True
             self.playlist_manager.double_clicked = False
         return True
 

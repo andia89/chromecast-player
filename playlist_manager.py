@@ -23,10 +23,12 @@ class PlaylistManager(Gtk.Window):
         self.double_clicked = False
         self.transcoder = transcoder
         self.number_clicked = 0
+        self.double_clicked_index = None
         self.probe = probe
         self.preferred_transcoder = preferred_transcoder
         self.enable_web = enable_web
         self.show_image = True
+        self.sorted_index = None
 
 
     def exit(self, *args):
@@ -260,7 +262,7 @@ class PlaylistManager(Gtk.Window):
 
     def _double_clicked(self, *args):
         index = args[1].get_indices()[0]
-        self.playlist_counter = index
+        self.double_clicked_index = index
         self.double_clicked = True
         self.show_image = True
 
@@ -299,6 +301,27 @@ class PlaylistManager(Gtk.Window):
             self.playlist_changed = True
 
 
+    def _on_column_clicked(self, *args):
+        index = self.playlist_counter
+        uri_win = []
+        item = self.store.get_iter_first()
+        while (item != None):
+            uri_win.append(self.store.get_value(item, 1))
+            item = self.store.iter_next(item)
+        player_uri = [pl[0] for pl in self.play_uri]
+        indices = []
+        for uri in player_uri:
+            indices.append(uri_win.index(uri))
+        l = [x for (y,x) in sorted(zip(indices,self.play_uri))]
+        if index is not None:
+            self.store[index][0] = None
+            new_index = indices[index]
+            self.store[new_index][0] = self.playimage
+            self.sorted_index = new_index
+        self.play_uri = l
+        self.playlist_changed = True
+        
+
     def create_model(self, playlist):
         self.store.clear()
         self.play_uri = playlist[:]
@@ -312,10 +335,10 @@ class PlaylistManager(Gtk.Window):
 
     def create_columns(self, treeView):
         rendererPixbuf = Gtk.CellRendererPixbuf()
-        column = Gtk.TreeViewColumn(None, rendererPixbuf, pixbuf=0)
-        column.set_sort_column_id(0)
-        column.set_resizable(False) 
-        treeView.append_column(column)
+        pixcolumn = Gtk.TreeViewColumn(None, rendererPixbuf, pixbuf=0)
+        pixcolumn.set_fixed_width(20)
+        pixcolumn.set_resizable(False)
+        treeView.append_column(pixcolumn)
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("URI", rendererText, text=1)
@@ -323,6 +346,7 @@ class PlaylistManager(Gtk.Window):
         column.set_fixed_width(180)
         column.set_sort_column_id(1)  
         column.set_resizable(True)
+        column.connect("clicked", self._on_column_clicked)
         treeView.append_column(column)
         
         rendererText = Gtk.CellRendererText()
@@ -331,6 +355,7 @@ class PlaylistManager(Gtk.Window):
         column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.connect("clicked", self._on_column_clicked)
         treeView.append_column(column)
 
         rendererText = Gtk.CellRendererText()
@@ -339,6 +364,7 @@ class PlaylistManager(Gtk.Window):
         column.set_spacing(50)
         column.set_fixed_width(40)
         column.set_resizable(True)
+        column.connect("clicked", self._on_column_clicked)
         treeView.append_column(column)
 
         rendererText = Gtk.CellRendererText()
@@ -347,6 +373,7 @@ class PlaylistManager(Gtk.Window):
         column.set_spacing(50)
         column.set_fixed_width(40)
         column.set_resizable(True)
+        column.connect("clicked", self._on_column_clicked)
         treeView.append_column(column)
 
         rendererText = Gtk.CellRendererText()
@@ -354,7 +381,8 @@ class PlaylistManager(Gtk.Window):
         column.set_sort_column_id(5)
         column.set_spacing(50)
         column.set_fixed_width(180)
-        column.set_resizable(True)        
+        column.set_resizable(True)
+        column.connect("clicked", self._on_column_clicked)
         treeView.append_column(column)
 
         rendererText = Gtk.CellRendererText()
@@ -363,6 +391,7 @@ class PlaylistManager(Gtk.Window):
         column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.connect("clicked", self._on_column_clicked)
         treeView.append_column(column)
 
         rendererText = Gtk.CellRendererText()
@@ -371,6 +400,7 @@ class PlaylistManager(Gtk.Window):
         column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.connect("clicked", self._on_column_clicked)
         treeView.append_column(column)
         
         rendererText = Gtk.CellRendererText()
@@ -379,6 +409,7 @@ class PlaylistManager(Gtk.Window):
         column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.connect("clicked", self._on_column_clicked)
         treeView.append_column(column)
 
 
