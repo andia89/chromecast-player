@@ -1,3 +1,5 @@
+from gi import require_version
+require_version("Gtk", "3.0")
 from gi.repository import Gtk, GdkPixbuf, GLib
 import helpers
 from stream_select import FileChooserWindow, NetworkStream
@@ -187,15 +189,25 @@ class PlaylistManager(Gtk.Window):
 
     def _on_down_clicked(self, *args):
         index = self.get_selected_index()
-        if not index == len(self.play_uri)-1:
-            if self.playlist_counter:
-                if self.playlist_counter == index:
-                    self.counter = self.playlist_counter + 1
+        if self.playlist_counter is not None:
+            plc = self.playlist_counter + self.number_clicked
+        else:
+            plc = None
+        if not index == len(self.store)-1:
+            if self.playlist_counter is not None:
+                if plc == index:
+                    self.number_clicked += 1
                     self.playlist_counter_changed = True
-                elif self.playlist_counter == index + 1:
-                    self.counter = self.playlist_counter - 1
+                elif plc == index + 1:
+                    self.number_clicked += -1
                     self.playlist_counter_changed = True
             self.move_item_down()
+            if plc == index:
+                self.store[index][0] = None
+                self.store[index+1][0] = self.playimage
+            elif plc == index + 1:
+                self.store[index+1][0] = None
+                self.store[index][0] = self.playimage
             self.selection_index = index + 1
             popped = self.play_uri.pop(index)
             self.play_uri.insert(index+1, popped)
@@ -220,7 +232,7 @@ class PlaylistManager(Gtk.Window):
             if plc == index:
                 self.store[plc][0] = None
                 self.store[0][0] = self.playimage
-            elif index > plc:
+            elif plc and index > plc:
                 self.store[plc][0] = None
                 self.store[plc+1][0] = self.playimage
             self.selection_index = 0
@@ -246,12 +258,12 @@ class PlaylistManager(Gtk.Window):
             self.move_item_bottom()
             if plc == index:
                 self.store[plc][0] = None
-                self.store[len(self.store)-1][0] = self.playimage
-            elif index < plc:
+                self.store[-1][0] = self.playimage
+            elif plc and index < plc:
                 self.store[plc][0] = None
                 self.store[plc-1][0] = self.playimage
             self.selection_index = len(self.store)-1
-            popped = self.play_uri.pop(-1)
+            popped = self.play_uri.pop(index)
             self.play_uri.append(popped)
             self.playlist_changed = True
         
@@ -392,6 +404,7 @@ class PlaylistManager(Gtk.Window):
         selections, model = selection.get_selected_rows()
         for row in selections:
             if selection.iter_is_selected(row.iter) and row.next:
+                print(row.next.iter)
                 self.store.swap(row.iter, row.next.iter)
 
 
