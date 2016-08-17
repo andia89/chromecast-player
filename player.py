@@ -411,21 +411,21 @@ class ChromecastPlayer(Gtk.Application):
                 if self.mc:
                     self.mc.stop()
                     self._on_play_clicked()
-        if self.playlist_manager.playlist_counter_changed:
+        if self.playlist_manager.number_clicked:
             self.playlist_counter += self.playlist_manager.number_clicked
             self.playlist_manager.playlist_counter = self.playlist_counter
-            self.playlist_manager.playlist_counter_changed = False
             self.playlist_manager.number_clicked = 0
         else:
             for row in self.playlist_manager.store:
                 row[0] = None
-            if self.playlist_manager.show_image:
+            if self.playlist_manager.show_image and self.mc:
                 if self.playlist_manager.playlist_counter is not None:
                     self.playlist_manager.store[self.playlist_manager.playlist_counter][0] = self.playlist_manager.playimage
         if self.playlist_manager.double_clicked:
             if self.mc:
                 self.mc.stop()
                 self._on_play_clicked()
+            self.playlist_counter = self.playlist_manager.playlist_counter
             self.playlist_manager.show_image = True
             self.playlist_manager.double_clicked = False
         return True

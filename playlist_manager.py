@@ -20,7 +20,6 @@ class PlaylistManager(Gtk.Window):
         self.playlist_counter = None
         self.play_now = False
         self.playlist_changed = False
-        self.playlist_counter_changed = False
         self.double_clicked = False
         self.transcoder = transcoder
         self.number_clicked = 0
@@ -129,6 +128,7 @@ class PlaylistManager(Gtk.Window):
         bottombutton.connect("clicked", self._on_bottom_clicked)
         filem.connect('activate', self._on_file_clicked)
         self.streamm.connect('activate', self._on_net_stream_clicked)
+        self.treeView.connect("row-activated", self._double_clicked)
         exit.connect("activate", self.exit)
 
         self.win.set_size_request(1200, 700)
@@ -147,10 +147,8 @@ class PlaylistManager(Gtk.Window):
             plc = self.playlist_counter + self.number_clicked
             if plc == index and self.show_image:
                 self.number_clicked += -1
-                self.playlist_counter_changed = True
             elif index < plc:
                 self.number_clicked += -1
-                self.playlist_counter_changed = True
         self.delete_at_index(index)
         if plc == index and self.show_image:
             self.show_image = False
@@ -170,10 +168,8 @@ class PlaylistManager(Gtk.Window):
             if self.playlist_counter is not None:
                 if plc == index:
                     self.number_clicked += -1
-                    self.playlist_counter_changed = True
                 elif plc == index - 1:
                     self.number_clicked += 1
-                    self.playlist_counter_changed = True
             self.move_item_up()
             if plc == index:
                 self.store[index][0] = None
@@ -185,7 +181,7 @@ class PlaylistManager(Gtk.Window):
             popped = self.play_uri.pop(index)
             self.play_uri.insert(index-1, popped)
             self.playlist_changed = True
-            
+
 
     def _on_down_clicked(self, *args):
         index = self.get_selected_index()
@@ -197,10 +193,8 @@ class PlaylistManager(Gtk.Window):
             if self.playlist_counter is not None:
                 if plc == index:
                     self.number_clicked += 1
-                    self.playlist_counter_changed = True
                 elif plc == index + 1:
                     self.number_clicked += -1
-                    self.playlist_counter_changed = True
             self.move_item_down()
             if plc == index:
                 self.store[index][0] = None
@@ -224,10 +218,8 @@ class PlaylistManager(Gtk.Window):
             if self.playlist_counter is not None:
                 if plc == index:
                     self.number_clicked += -plc
-                    self.playlist_counter_changed = True
                 elif index > plc:
                     self.number_clicked += 1
-                    self.playlist_counter_changed = True
             self.move_item_top()
             if plc == index:
                 self.store[plc][0] = None
@@ -251,10 +243,8 @@ class PlaylistManager(Gtk.Window):
             if self.playlist_counter is not None:
                 if plc == index:
                     self.number_clicked += len(self.store) - plc - 1
-                    self.playlist_counter_changed = True 
                 elif index < plc:
                     self.number_clicked += -1
-                    self.playlist_counter_changed = True
             self.move_item_bottom()
             if plc == index:
                 self.store[plc][0] = None
@@ -265,10 +255,16 @@ class PlaylistManager(Gtk.Window):
             self.selection_index = len(self.store)-1
             popped = self.play_uri.pop(index)
             self.play_uri.append(popped)
-
             self.playlist_changed = True
-        
-    
+
+
+    def _double_clicked(self, *args):
+        index = args[1].get_indices()[0]
+        self.playlist_counter = index
+        self.double_clicked = True
+        self.show_image = True
+
+
     def _on_file_clicked(self, *args):
         win = FileChooserWindow()
         ret = win.main()
