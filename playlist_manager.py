@@ -265,6 +265,7 @@ class PlaylistManager(Gtk.Window):
             self.selection_index = len(self.store)-1
             popped = self.play_uri.pop(index)
             self.play_uri.append(popped)
+
             self.playlist_changed = True
         
     
@@ -404,8 +405,8 @@ class PlaylistManager(Gtk.Window):
         selections, model = selection.get_selected_rows()
         for row in selections:
             if selection.iter_is_selected(row.iter) and row.next:
-                print(row.next.iter)
                 self.store.swap(row.iter, row.next.iter)
+                break
 
 
     def move_item_up(self):
@@ -414,6 +415,7 @@ class PlaylistManager(Gtk.Window):
         for row in selections:
             if selection.iter_is_selected(row.iter) and row.previous:
                 self.store.swap(row.iter, row.previous.iter)
+                break
 
 
     def move_item_top(self):
