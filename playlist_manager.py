@@ -251,7 +251,7 @@ class PlaylistManager(Gtk.Window):
                 self.store[plc][0] = None
                 self.store[plc-1][0] = self.playimage
             self.selection_index = len(self.store)-1
-            popped = self.play_uri.pop(0)
+            popped = self.play_uri.pop(-1)
             self.play_uri.append(popped)
             self.playlist_changed = True
         
