@@ -192,10 +192,7 @@ class PlaylistManager(Gtk.Window):
                 self.store[self.playlist_counter+1][0] = self.playimage
                 self.sorted_index = self.playlist_counter + 1
         popped = self.play_uri.pop(index_source)
-        if index_drop > index_source:
-            self.play_uri.insert(index_drop, popped)
-        elif index_drop < index_source:
-            self.play_uri.insert(index_drop-1, popped)
+        self.play_uri.insert(index_drop, popped)
         self.selection_index = index_drop
         self.playlist_changed = True
         self.treeView.set_cursor(index_drop)
