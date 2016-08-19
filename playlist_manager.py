@@ -1,6 +1,6 @@
 from gi import require_version
 require_version("Gtk", "3.0")
-from gi.repository import Gtk, GdkPixbuf, GLib
+from gi.repository import Gtk, GdkPixbuf, GLib, Gdk
 import helpers
 from stream_select import FileChooserWindow, NetworkStream
 
@@ -21,6 +21,7 @@ class PlaylistManager(Gtk.Window):
         self.play_now = False
         self.playlist_changed = False
         self.double_clicked = False
+        self.drag_index = None
         self.transcoder = transcoder
         self.number_clicked = 0
         self.double_clicked_index = None
@@ -105,7 +106,17 @@ class PlaylistManager(Gtk.Window):
         sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.treeView = Gtk.TreeView(self.store)
         self.create_columns(self.treeView)
+        targets = []
+        self.treeView.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK, self.treeView,
+            Gdk.DragAction.MOVE)
+        
+        self.treeView.drag_dest_set(Gtk.DestDefaults.ALL, targets, Gdk.DragAction.MOVE)
+        self.treeView.connect("drag-data-received", self._on_drag_data_received)
+        self.treeView.connect("drag-drop", self._drag_dropped)
+        self.treeView.connect("drag-end", self._drag_finished)
+        self.drag_finished = False
         sw.add(self.treeView)
+        self.treeView.set_reorderable(True)
         
         okbutton.set_margin_right(10)
         filebutton.set_margin_left(10)
@@ -136,6 +147,64 @@ class PlaylistManager(Gtk.Window):
         self.win.set_size_request(1200, 700)
         self.win.add(vboxall)
         self.win.show_all()
+
+
+    def _on_drag_data_received(self, *args):
+        if not self.drag_finished:
+            return
+        else:
+            self.drag_finished = False
+        self.dummy = args
+        x = args[2]
+        y = args[3]
+        index_source = self.get_selected_index()
+        index_drop = self.treeView.get_dest_row_at_pos(x, y)
+
+        if index_drop == None:
+            index_drop = len(self.store)-1
+        else:
+            index_drop = index_drop[0].get_indices()[0]
+        if index_drop == index_source:
+            return
+        else:
+            self.index_source = index_source
+            self.index_drop = index_drop
+
+
+    def _drag_finished(self, *args):
+        if self.index_source is None or self.index_drop is None:
+            return
+        index_source = self.index_source
+        index_drop = self.index_drop
+        self.index_source = None
+        self.index_drop = None
+        if self.playlist_counter is not None:
+            if self.playlist_counter == index_source:
+                self.store[index_source][0] = None
+                self.store[index_drop][0] = self.playimage
+                self.sorted_index = index_drop
+            elif index_source < self.playlist_counter and index_drop > self.playlist_counter:
+                self.store[self.playlist_counter][0] = None
+                self.store[self.playlist_counter-1][0] = self.playimage
+                self.sorted_index = self.playlist_counter -1
+            elif index_source > self.playlist_counter and index_drop <= self.playlist_counter:
+                self.store[self.playlist_counter][0] = None
+                self.store[self.playlist_counter+1][0] = self.playimage
+                self.sorted_index = self.playlist_counter + 1
+        popped = self.play_uri.pop(index_source)
+        if index_drop > index_source:
+            self.play_uri.insert(index_drop, popped)
+        elif index_drop < index_source:
+            self.play_uri.insert(index_drop-1, popped)
+        self.selection_index = index_drop
+        self.playlist_changed = True
+        self.treeView.set_cursor(index_drop)
+    
+
+    def _drag_dropped(self, *args):
+        self.drag_finished = True
+        self.index_source = None
+        self.index_drop = None
 
 
     def _on_delete_clicked(self, *args):
@@ -342,7 +411,6 @@ class PlaylistManager(Gtk.Window):
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("URI", rendererText, text=1)
-        column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_sort_column_id(1)  
         column.set_resizable(True)
@@ -352,7 +420,6 @@ class PlaylistManager(Gtk.Window):
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Title", rendererText, text=2)
         column.set_sort_column_id(2)
-        column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
         column.connect("clicked", self._on_column_clicked)
@@ -361,7 +428,6 @@ class PlaylistManager(Gtk.Window):
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Nr", rendererText, text=3)
         column.set_sort_column_id(3)
-        column.set_spacing(50)
         column.set_fixed_width(40)
         column.set_resizable(True)
         column.connect("clicked", self._on_column_clicked)
@@ -370,7 +436,6 @@ class PlaylistManager(Gtk.Window):
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("CD", rendererText, text=4)
         column.set_sort_column_id(4)
-        column.set_spacing(50)
         column.set_fixed_width(40)
         column.set_resizable(True)
         column.connect("clicked", self._on_column_clicked)
@@ -379,7 +444,6 @@ class PlaylistManager(Gtk.Window):
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Album", rendererText, text=5)
         column.set_sort_column_id(5)
-        column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
         column.connect("clicked", self._on_column_clicked)
@@ -388,7 +452,6 @@ class PlaylistManager(Gtk.Window):
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Artist", rendererText, text=6)
         column.set_sort_column_id(6)
-        column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
         column.connect("clicked", self._on_column_clicked)
@@ -397,7 +460,6 @@ class PlaylistManager(Gtk.Window):
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("AlbumArtist", rendererText, text=7)
         column.set_sort_column_id(7)
-        column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
         column.connect("clicked", self._on_column_clicked)
@@ -406,7 +468,6 @@ class PlaylistManager(Gtk.Window):
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Composer", rendererText, text=8)
         column.set_sort_column_id(8)
-        column.set_spacing(50)
         column.set_fixed_width(180)
         column.set_resizable(True)
         column.connect("clicked", self._on_column_clicked)
