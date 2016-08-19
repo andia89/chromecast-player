@@ -529,150 +529,153 @@ class ChromecastPlayer(Gtk.Application):
     def _worker_thread(self):
         if self.stop_worker:
             return False
-        if self.play_uri:
-            self.playlist.set_sensitive(True)
-        else:
-            self.playlist.set_sensitive(False)
-        if self.cast and self.cast.status:
-            self.disconnect.set_sensitive(True)
-            try:
-                self.mc.update_status(blocking=True)
-            except:
-                pass
-            if self.mc.status.player_state == 'PLAYING' or (self.mc.status.player_state == 'BUFFERING' and self.mc.status.current_time != 0):
-                self.continue_playing = True
-                self.is_playing = True
-                self.is_paused = False
-                self.is_idle = False
-                self.is_disconnected = False
-                if not self.seeking:
-                    curr = self.mc.status.current_time
-                    dur = self.mc.status.duration
-                    self.progressbar.handler_block_by_func(self._slider_changed)
-                    if dur and curr:
-                        self.progressbar.set_value(curr/dur)
-                    self.progressbar.handler_unblock_by_func(self._slider_changed)
-                    self.label.set_label("%02d:%02d/%02d:%02d"%(int(curr/60), int(curr%60), int(dur/60), int(dur%60)))
-                self.pause.set_sensitive(True)
-                self.stop.set_sensitive(True)
-                self.volume.set_sensitive(True)
-                self.play.set_sensitive(False)
-                if self.mc.status.title:
-                    self.win.set_title(self.mc.status.title)    
-                if not self.volume_changing:
-                    self.volume.handler_block_by_func(self._volume_changed)
-                    self.volume.set_value(self.mc.status.volume_level)
-                    self.volume.handler_unblock_by_func(self._volume_changed)
-                if self.mc.status.supports_skip_forward or (len(self.play_uri) > self.playlist_counter + 1):
-                    self.next.set_sensitive(True)
-                else:
-                    self.next.set_sensitive(False)
-                if self.play_uri and (self.mc.status.supports_skip_backward or (self.playlist_counter != 0)):
-                    self.prev.set_sensitive(True)
-                else:
-                    self.prev.set_sensitive(False)
-                if self.playlist_manager:
-                    self.playlist_manager.playlist_counter = self.playlist_counter
-            elif self.mc.status.player_state == 'PAUSED':
-                self.is_playing = False
-                self.is_paused = True
-                self.is_idle = False
-                self.is_disconnected = False
-                self.pause.set_sensitive(False)
-                self.play.set_sensitive(True)
-                self.volume.set_sensitive(True)
-                if self.mc.status.title:
-                    self.win.set_title(self.mc.status.title)
-                if not self.volume_changing:
-                    self.volume.handler_block_by_func(self._volume_changed)
-                    self.volume.set_value(self.mc.status.volume_level)
-                    self.volume.handler_unblock_by_func(self._volume_changed)
-                self.stop.set_sensitive(True)
-                if self.mc.status.supports_skip_forward or (len(self.play_uri) > self.playlist_counter + 1):
-                    self.next.set_sensitive(True)
-                else:
-                    self.next.set_sensitive(False)
-                if self.play_uri and (self.mc.status.supports_skip_backward or (self.playlist_counter != 0)):
-                    self.prev.set_sensitive(True)
-                else:
-                    self.prev.set_sensitive(False)
-                if self.playlist_manager:
-                    self.playlist_manager.playlist_counter = self.playlist_counter
-            elif self.mc.status.player_state == 'IDLE':
-                self.is_playing = False
-                self.is_paused = False
-                self.is_idle = True
-                self.is_disconnected = False
-                self.label.set_label("0:00/0:00")
-                self.stop.set_sensitive(False)
-                self.volume.set_sensitive(False)
-                self.volume.handler_block_by_func(self._volume_changed)
-                self.volume.set_value(0)
-                self.volume.handler_unblock_by_func(self._volume_changed)
-                self.prev.set_sensitive(False)
-                self.next.set_sensitive(False)
-                self.progressbar.handler_block_by_func(self._slider_changed)
-                self.progressbar.set_value(0.)
-                self.progressbar.handler_unblock_by_func(self._slider_changed)
-                self.pause.set_sensitive(False)
-                self.win.set_title("Chromecast Player")
-                if self.continue_playing and self.mc.status.idle_reason == 'FINISHED':
-                    self._on_next_clicked()
-                if self.play_uri and not (self.continue_playing and self.mc.status.idle_reason == 'FINISHED'):
-                    self.play.set_sensitive(True)
-                if self.playlist_manager:
-                    self.playlist_manager.playlist_counter = None
-                    self.playlist_manager.show_image = True
+        try:
+            if self.play_uri:
+                self.playlist.set_sensitive(True)
             else:
+                self.playlist.set_sensitive(False)
+            if self.cast and self.cast.status:
+                self.disconnect.set_sensitive(True)
+                try:
+                    self.mc.update_status(blocking=True)
+                except:
+                    pass
+                if self.mc.status.player_state == 'PLAYING' or (self.mc.status.player_state == 'BUFFERING' and self.mc.status.current_time != 0):
+                    self.continue_playing = True
+                    self.is_playing = True
+                    self.is_paused = False
+                    self.is_idle = False
+                    self.is_disconnected = False
+                    if not self.seeking:
+                        curr = self.mc.status.current_time
+                        dur = self.mc.status.duration
+                        self.progressbar.handler_block_by_func(self._slider_changed)
+                        if dur and curr:
+                            self.progressbar.set_value(curr/dur)
+                        self.progressbar.handler_unblock_by_func(self._slider_changed)
+                        self.label.set_label("%02d:%02d/%02d:%02d"%(int(curr/60), int(curr%60), int(dur/60), int(dur%60)))
+                    self.pause.set_sensitive(True)
+                    self.stop.set_sensitive(True)
+                    self.volume.set_sensitive(True)
+                    self.play.set_sensitive(False)
+                    if self.mc.status.title:
+                        self.win.set_title(self.mc.status.title)    
+                    if not self.volume_changing:
+                        self.volume.handler_block_by_func(self._volume_changed)
+                        self.volume.set_value(self.mc.status.volume_level)
+                        self.volume.handler_unblock_by_func(self._volume_changed)
+                    if self.mc.status.supports_skip_forward or (len(self.play_uri) > self.playlist_counter + 1):
+                        self.next.set_sensitive(True)
+                    else:
+                        self.next.set_sensitive(False)
+                    if self.play_uri and (self.mc.status.supports_skip_backward or (self.playlist_counter != 0)):
+                        self.prev.set_sensitive(True)
+                    else:
+                        self.prev.set_sensitive(False)
+                    if self.playlist_manager:
+                        self.playlist_manager.playlist_counter = self.playlist_counter
+                elif self.mc.status.player_state == 'PAUSED':
+                    self.is_playing = False
+                    self.is_paused = True
+                    self.is_idle = False
+                    self.is_disconnected = False
+                    self.pause.set_sensitive(False)
+                    self.play.set_sensitive(True)
+                    self.volume.set_sensitive(True)
+                    if self.mc.status.title:
+                        self.win.set_title(self.mc.status.title)
+                    if not self.volume_changing:
+                        self.volume.handler_block_by_func(self._volume_changed)
+                        self.volume.set_value(self.mc.status.volume_level)
+                        self.volume.handler_unblock_by_func(self._volume_changed)
+                    self.stop.set_sensitive(True)
+                    if self.mc.status.supports_skip_forward or (len(self.play_uri) > self.playlist_counter + 1):
+                        self.next.set_sensitive(True)
+                    else:
+                        self.next.set_sensitive(False)
+                    if self.play_uri and (self.mc.status.supports_skip_backward or (self.playlist_counter != 0)):
+                        self.prev.set_sensitive(True)
+                    else:
+                        self.prev.set_sensitive(False)
+                    if self.playlist_manager:
+                        self.playlist_manager.playlist_counter = self.playlist_counter
+                elif self.mc.status.player_state == 'IDLE':
+                    self.is_playing = False
+                    self.is_paused = False
+                    self.is_idle = True
+                    self.is_disconnected = False
+                    self.label.set_label("0:00/0:00")
+                    self.stop.set_sensitive(False)
+                    self.volume.set_sensitive(False)
+                    self.volume.handler_block_by_func(self._volume_changed)
+                    self.volume.set_value(0)
+                    self.volume.handler_unblock_by_func(self._volume_changed)
+                    self.prev.set_sensitive(False)
+                    self.next.set_sensitive(False)
+                    self.progressbar.handler_block_by_func(self._slider_changed)
+                    self.progressbar.set_value(0.)
+                    self.progressbar.handler_unblock_by_func(self._slider_changed)
+                    self.pause.set_sensitive(False)
+                    self.win.set_title("Chromecast Player")
+                    if self.continue_playing and self.mc.status.idle_reason == 'FINISHED':
+                        self._on_next_clicked()
+                    if self.play_uri and not (self.continue_playing and self.mc.status.idle_reason == 'FINISHED'):
+                        self.play.set_sensitive(True)
+                    if self.playlist_manager:
+                        self.playlist_manager.playlist_counter = None
+                        self.playlist_manager.show_image = True
+                else:
+                    self.is_playing = False
+                    self.is_paused = False
+                    self.is_idle = False
+                    self.is_disconnected = False
+                    self.win.set_title("Chromecast Player")
+                    self.label.set_label("0:00/0:00")
+                    self.stop.set_sensitive(False)
+                    self.pause.set_sensitive(False)
+                    self.volume.set_sensitive(False)
+                    self.volume.handler_block_by_func(self._volume_changed)
+                    self.volume.set_value(0)
+                    self.volume.handler_unblock_by_func(self._volume_changed)
+                    self.prev.set_sensitive(False)
+                    self.next.set_sensitive(False)
+                    self.progressbar.handler_block_by_func(self._slider_changed)
+                    self.progressbar.set_value(0.)
+                    self.progressbar.handler_unblock_by_func(self._slider_changed)
+                    if self.play_uri and not self.continue_playing:
+                        self.play.set_sensitive(True)
+                    else:
+                        self.play.set_sensitive(False)
+                    if self.playlist_manager:
+                        self.playlist_manager.playlist_counter = None
+                        self.playlist_manager.show_image = True
+            else:
+                self.continue_playing = False
                 self.is_playing = False
                 self.is_paused = False
                 self.is_idle = False
-                self.is_disconnected = False
+                self.is_disconnected = True
                 self.win.set_title("Chromecast Player")
-                self.label.set_label("0:00/0:00")
-                self.stop.set_sensitive(False)
+                self.disconnect.set_sensitive(False)
+                self.label.set_label("00:00/00:00")
                 self.pause.set_sensitive(False)
                 self.volume.set_sensitive(False)
                 self.volume.handler_block_by_func(self._volume_changed)
                 self.volume.set_value(0)
                 self.volume.handler_unblock_by_func(self._volume_changed)
+                self.stop.set_sensitive(False)
                 self.prev.set_sensitive(False)
                 self.next.set_sensitive(False)
                 self.progressbar.handler_block_by_func(self._slider_changed)
                 self.progressbar.set_value(0.)
                 self.progressbar.handler_unblock_by_func(self._slider_changed)
-                if self.play_uri and not self.continue_playing:
-                    self.play.set_sensitive(True)
-                else:
-                    self.play.set_sensitive(False)
+                self.play.set_sensitive(False)
                 if self.playlist_manager:
                     self.playlist_manager.playlist_counter = None
                     self.playlist_manager.show_image = True
-        else:
-            self.continue_playing = False
-            self.is_playing = False
-            self.is_paused = False
-            self.is_idle = False
-            self.is_disconnected = True
-            self.win.set_title("Chromecast Player")
-            self.disconnect.set_sensitive(False)
-            self.label.set_label("00:00/00:00")
-            self.pause.set_sensitive(False)
-            self.volume.set_sensitive(False)
-            self.volume.handler_block_by_func(self._volume_changed)
-            self.volume.set_value(0)
-            self.volume.handler_unblock_by_func(self._volume_changed)
-            self.stop.set_sensitive(False)
-            self.prev.set_sensitive(False)
-            self.next.set_sensitive(False)
-            self.progressbar.handler_block_by_func(self._slider_changed)
-            self.progressbar.set_value(0.)
-            self.progressbar.handler_unblock_by_func(self._slider_changed)
-            self.play.set_sensitive(False)
-            if self.playlist_manager:
-                self.playlist_manager.playlist_counter = None
-                self.playlist_manager.show_image = True
-        return True 
+            return True
+        except:
+            return True
 
 
     def get_chromecast_config(self):
@@ -689,6 +692,8 @@ class ChromecastPlayer(Gtk.Application):
 
 
     def play_media(self):
+        if self.play_uri[self.playlist_counter][0] is None:
+            return
         self.mc.stop()
         self.cast.wait()
         if self.serverthread:
@@ -713,7 +718,43 @@ class ChromecastPlayer(Gtk.Application):
         if self.cast:
             self.cast.wait()
             self.mc = self.cast.media_controller
+            time.sleep(0.2)
+            self.check_already_playing()
 
+
+    def check_already_playing(self):
+        self.mc.update_status()
+        if self.mc.status.player_state == 'PLAYING' or self.mc.status.player_state == 'PAUSED' or (self.mc.status.player_state == 'BUFFERING' and self.mc.status.current_time != 0):
+            metadata = {}
+            try:
+                metadata['title'] = self.mc.status.title
+            except:
+                pass
+            try:
+                metadata['albumName'] = self.mc.status.album_name
+            except:
+                pass
+            try:
+                metadata['artist'] = self.mc.status.artist
+            except:
+                pass
+            try:
+                metadata['composer'] = self.mc.status.composer
+            except:
+                pass
+            try:
+                metadata['trackNumber'] = self.mc.status.track
+            except:
+                pass
+            try:
+                metadata['discNumber'] = self.mc.status.cd
+            except:
+                pass
+            try:
+                metadata['albumArtist'] = self.mc.status.album_artist
+            except:
+                pass
+            self.play_uri.append([None, False, self.mc.status.content_type, False, metadata, None, None])
 
     def local_url(self, filename, transcode=False, transcoder=None, transcode_options=None, server_port=None):
         """ play a local file on the chromecast """
