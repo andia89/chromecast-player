@@ -368,6 +368,8 @@ class PlaylistManager(Gtk.Window):
 
 
     def _on_column_clicked(self, *args):
+        column = args[0]
+        column_index = args[1]
         index = self.playlist_counter
         uri_win = []
         item = self.store.get_iter_first()
@@ -386,7 +388,16 @@ class PlaylistManager(Gtk.Window):
             self.sorted_index = new_index
         self.play_uri = l
         self.playlist_changed = True
-        
+        order = column.get_sort_order()
+        self.dummy = order
+        self.store.set_sort_column_id(Gtk.TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, Gtk.SortType.ASCENDING)
+        if order == Gtk.SortType.ASCENDING:
+            column.set_sort_column_id(column_index)
+            column.set_sort_order(Gtk.SortType.ASCENDING)
+        else:
+            column.set_sort_column_id(column_index)
+            column.set_sort_order(Gtk.SortType.DESCENDING)
+            
 
     def create_model(self, playlist):
         self.store.clear()
@@ -405,70 +416,79 @@ class PlaylistManager(Gtk.Window):
         pixcolumn.set_fixed_width(20)
         pixcolumn.set_resizable(False)
         treeView.append_column(pixcolumn)
+        self.sort_columns = []
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("URI", rendererText, text=1)
         column.set_fixed_width(180)
         column.set_sort_column_id(1)  
         column.set_resizable(True)
-        column.connect("clicked", self._on_column_clicked)
+        column.connect("clicked", self._on_column_clicked, 1)
         treeView.append_column(column)
+        self.sort_columns.append(column)
         
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Title", rendererText, text=2)
         column.set_sort_column_id(2)
         column.set_fixed_width(180)
         column.set_resizable(True)
-        column.connect("clicked", self._on_column_clicked)
+        column.connect("clicked", self._on_column_clicked, 2)
         treeView.append_column(column)
+        self.sort_columns.append(column)
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Nr", rendererText, text=3)
         column.set_sort_column_id(3)
         column.set_fixed_width(40)
         column.set_resizable(True)
-        column.connect("clicked", self._on_column_clicked)
+        column.connect("clicked", self._on_column_clicked, 3)
         treeView.append_column(column)
+        self.sort_columns.append(column)
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("CD", rendererText, text=4)
         column.set_sort_column_id(4)
         column.set_fixed_width(40)
         column.set_resizable(True)
-        column.connect("clicked", self._on_column_clicked)
+        column.connect("clicked", self._on_column_clicked, 4)
         treeView.append_column(column)
+        self.sort_columns.append(column)
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Album", rendererText, text=5)
         column.set_sort_column_id(5)
         column.set_fixed_width(180)
         column.set_resizable(True)
-        column.connect("clicked", self._on_column_clicked)
+        column.connect("clicked", self._on_column_clicked, 5)
         treeView.append_column(column)
+        self.sort_columns.append(column)
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Artist", rendererText, text=6)
         column.set_sort_column_id(6)
         column.set_fixed_width(180)
         column.set_resizable(True)
-        column.connect("clicked", self._on_column_clicked)
+        column.connect("clicked", self._on_column_clicked, 6)
         treeView.append_column(column)
+        self.sort_columns.append(column)
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("AlbumArtist", rendererText, text=7)
         column.set_sort_column_id(7)
         column.set_fixed_width(180)
         column.set_resizable(True)
-        column.connect("clicked", self._on_column_clicked)
+        column.connect("clicked", self._on_column_clicked, 7)
         treeView.append_column(column)
+        self.sort_columns.append(column)
         
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Composer", rendererText, text=8)
         column.set_sort_column_id(8)
         column.set_fixed_width(180)
         column.set_resizable(True)
-        column.connect("clicked", self._on_column_clicked)
+        column.connect("clicked", self._on_column_clicked, 8)
         treeView.append_column(column)
+        self.sort_columns.append(column)
 
 
     def get_selected_index(self):
