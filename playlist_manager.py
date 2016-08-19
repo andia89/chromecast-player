@@ -105,6 +105,7 @@ class PlaylistManager(Gtk.Window):
         sw.set_shadow_type(Gtk.ShadowType.IN)
         sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.treeView = Gtk.TreeView(self.store)
+        self.treeView.set_grid_lines(Gtk.TreeViewGridLines.BOTH)
         self.create_columns(self.treeView)
         targets = []
         self.treeView.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK, self.treeView,
