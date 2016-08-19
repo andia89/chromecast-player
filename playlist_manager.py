@@ -190,6 +190,7 @@ class PlaylistManager(Gtk.Window):
 
 
     def _drag_dropped(self, *args):
+        self.remove_sort_indicator()
         self.drag_finished = True
         self.index_source = None
         self.index_drop = None
@@ -215,6 +216,7 @@ class PlaylistManager(Gtk.Window):
         self.selection_index = index - 1
         popped = self.play_uri.pop(index)
         self.playlist_changed = True
+        self.remove_sort_indicator()
 
 
     def _on_up_clicked(self, *args):
@@ -240,6 +242,7 @@ class PlaylistManager(Gtk.Window):
             popped = self.play_uri.pop(index)
             self.play_uri.insert(index-1, popped)
             self.playlist_changed = True
+            self.remove_sort_indicator()
 
 
     def _on_down_clicked(self, *args):
@@ -265,6 +268,7 @@ class PlaylistManager(Gtk.Window):
             popped = self.play_uri.pop(index)
             self.play_uri.insert(index+1, popped)
             self.playlist_changed = True
+            self.remove_sort_indicator()
 
 
     def _on_top_clicked(self, *args):
@@ -290,6 +294,7 @@ class PlaylistManager(Gtk.Window):
             popped = self.play_uri.pop(index)
             self.play_uri.insert(0, popped)
             self.playlist_changed = True
+            self.remove_sort_indicator()
 
 
     def _on_bottom_clicked(self, *args):
@@ -315,6 +320,7 @@ class PlaylistManager(Gtk.Window):
             popped = self.play_uri.pop(index)
             self.play_uri.append(popped)
             self.playlist_changed = True
+            self.remove_sort_indicator()
 
 
     def _double_clicked(self, *args):
@@ -338,6 +344,7 @@ class PlaylistManager(Gtk.Window):
                 for i, u in enumerate(ret[0]):
                     self.play_uri.append(helpers.decode_local_uri(u, self.transcoder, self.probe, self.preferred_transcoder))
             self.playlist_changed = True
+            self.remove_sort_indicator()
 
 
     def _on_net_stream_clicked(self, *args):
@@ -356,6 +363,7 @@ class PlaylistManager(Gtk.Window):
                 if n:
                     self.play_uri.append(n)
             self.playlist_changed = True
+            self.remove_sort_indicator()
 
 
     def _on_column_clicked(self, *args):
@@ -380,15 +388,33 @@ class PlaylistManager(Gtk.Window):
         self.play_uri = l
         self.playlist_changed = True
         order = column.get_sort_order()
-        self.dummy = order
-        self.store.set_sort_column_id(Gtk.TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, Gtk.SortType.ASCENDING)
-        if order == Gtk.SortType.ASCENDING:
-            column.set_sort_column_id(column_index)
-            column.set_sort_order(Gtk.SortType.ASCENDING)
+        self.sort_rows(column, column_index, order)
+        column.set_sort_indicator(True)
+
+
+    def sort_rows(self, column, index, sortorder):
+        """ Sort the rows based on the given column """
+        self.remove_sort_indicator()
+
+        rows = [tuple(r) + (i,) for i, r in enumerate(self.store)]
+        
+        column.set_sort_indicator(True)
+        if sortorder == Gtk.SortType.ASCENDING:
+            sortorder = Gtk.SortType.DESCENDING
+            reverse = False
         else:
-            column.set_sort_column_id(column_index)
-            column.set_sort_order(Gtk.SortType.DESCENDING)
-            
+            sortorder = Gtk.SortType.ASCENDING
+            reverse = True
+
+        rows.sort(key=lambda x: x[index], reverse=reverse)
+        self.store.reorder([r[-1] for r in rows])
+        column.set_sort_order(sortorder)
+
+
+    def remove_sort_indicator(self):
+        for k in self.sort_columns:
+            k[0].set_sort_indicator(False)
+
 
     def create_model(self, playlist):
         self.store.clear()
@@ -407,79 +433,79 @@ class PlaylistManager(Gtk.Window):
         pixcolumn.set_fixed_width(20)
         pixcolumn.set_resizable(False)
         treeView.append_column(pixcolumn)
-        self.sort_columns = []
+        self.sort_columns = [[pixcolumn, 0]]
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("URI", rendererText, text=1)
         column.set_fixed_width(180)
-        column.set_sort_column_id(1)  
         column.set_resizable(True)
+        column.set_clickable(True)
         column.connect("clicked", self._on_column_clicked, 1)
         treeView.append_column(column)
-        self.sort_columns.append(column)
+        self.sort_columns.append([column, 0])
         
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Title", rendererText, text=2)
-        column.set_sort_column_id(2)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.set_clickable(True)
         column.connect("clicked", self._on_column_clicked, 2)
         treeView.append_column(column)
-        self.sort_columns.append(column)
+        self.sort_columns.append([column, 0])
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Nr", rendererText, text=3)
-        column.set_sort_column_id(3)
         column.set_fixed_width(40)
         column.set_resizable(True)
+        column.set_clickable(True)
         column.connect("clicked", self._on_column_clicked, 3)
         treeView.append_column(column)
-        self.sort_columns.append(column)
+        self.sort_columns.append([column, 0])
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("CD", rendererText, text=4)
-        column.set_sort_column_id(4)
         column.set_fixed_width(40)
         column.set_resizable(True)
+        column.set_clickable(True)
         column.connect("clicked", self._on_column_clicked, 4)
         treeView.append_column(column)
-        self.sort_columns.append(column)
+        self.sort_columns.append([column, 0])
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Album", rendererText, text=5)
-        column.set_sort_column_id(5)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.set_clickable(True)
         column.connect("clicked", self._on_column_clicked, 5)
         treeView.append_column(column)
-        self.sort_columns.append(column)
+        self.sort_columns.append([column, 0])
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Artist", rendererText, text=6)
-        column.set_sort_column_id(6)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.set_clickable(True)
         column.connect("clicked", self._on_column_clicked, 6)
         treeView.append_column(column)
-        self.sort_columns.append(column)
+        self.sort_columns.append([column, 0])
 
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("AlbumArtist", rendererText, text=7)
-        column.set_sort_column_id(7)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.set_clickable(True)
         column.connect("clicked", self._on_column_clicked, 7)
         treeView.append_column(column)
-        self.sort_columns.append(column)
+        self.sort_columns.append([column, 0])
         
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Composer", rendererText, text=8)
-        column.set_sort_column_id(8)
         column.set_fixed_width(180)
         column.set_resizable(True)
+        column.set_clickable(True)
         column.connect("clicked", self._on_column_clicked, 8)
         treeView.append_column(column)
-        self.sort_columns.append(column)
+        self.sort_columns.append([column, 0])
 
 
     def get_selected_index(self):
