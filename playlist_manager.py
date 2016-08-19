@@ -154,28 +154,19 @@ class PlaylistManager(Gtk.Window):
             return
         else:
             self.drag_finished = False
-        self.dummy = args
-        x = args[2]
-        y = args[3]
         index_source = self.get_selected_index()
-        index_drop = self.treeView.get_dest_row_at_pos(x, y)
-
-        if index_drop == None:
-            index_drop = len(self.store)-1
-        else:
-            index_drop = index_drop[0].get_indices()[0]
-        if index_drop == index_source:
-            return
-        else:
-            self.index_source = index_source
-            self.index_drop = index_drop
+        self.index_source = index_source
+        self.source_uri = self.store[index_source][1]
 
 
     def _drag_finished(self, *args):
-        if self.index_source is None or self.index_drop is None:
+        if self.index_source is None:
             return
+        for i, row in enumerate(self.store):
+            if row[1] == self.source_uri:
+                index_drop = i
+                break
         index_source = self.index_source
-        index_drop = self.index_drop
         self.index_source = None
         self.index_drop = None
         if self.playlist_counter is not None:
@@ -183,7 +174,7 @@ class PlaylistManager(Gtk.Window):
                 self.store[index_source][0] = None
                 self.store[index_drop][0] = self.playimage
                 self.sorted_index = index_drop
-            elif index_source < self.playlist_counter and index_drop > self.playlist_counter:
+            elif index_source < self.playlist_counter and index_drop >= self.playlist_counter:
                 self.store[self.playlist_counter][0] = None
                 self.store[self.playlist_counter-1][0] = self.playimage
                 self.sorted_index = self.playlist_counter -1
@@ -196,7 +187,7 @@ class PlaylistManager(Gtk.Window):
         self.selection_index = index_drop
         self.playlist_changed = True
         self.treeView.set_cursor(index_drop)
-    
+
 
     def _drag_dropped(self, *args):
         self.drag_finished = True
