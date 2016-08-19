@@ -370,6 +370,8 @@ class PlaylistManager(Gtk.Window):
         column = args[0]
         column_index = args[1]
         index = self.playlist_counter
+        order = column.get_sort_order()
+        self.sort_rows(column, column_index, order)
         uri_win = []
         item = self.store.get_iter_first()
         while (item != None):
@@ -387,8 +389,6 @@ class PlaylistManager(Gtk.Window):
             self.sorted_index = new_index
         self.play_uri = l
         self.playlist_changed = True
-        order = column.get_sort_order()
-        self.sort_rows(column, column_index, order)
         column.set_sort_indicator(True)
 
 
@@ -397,8 +397,6 @@ class PlaylistManager(Gtk.Window):
         self.remove_sort_indicator()
 
         rows = [tuple(r) + (i,) for i, r in enumerate(self.store)]
-        
-        column.set_sort_indicator(True)
         if sortorder == Gtk.SortType.ASCENDING:
             sortorder = Gtk.SortType.DESCENDING
             reverse = False
