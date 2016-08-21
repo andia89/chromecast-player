@@ -796,7 +796,7 @@ class ChromecastPlayer(Gtk.Application):
         webserver_ip =[(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
         
         req_handler = local_server.RequestHandler
-
+        req_handler.content_type = mimetype
         if transcode:
             if transcoder == "ffmpeg":  
                 req_handler = local_server.TranscodingRequestHandler
@@ -806,7 +806,7 @@ class ChromecastPlayer(Gtk.Application):
                 req_handler.transcoder_command = AVCONV
             else:
                 return
-
+            req_handler.content_type = "video/mp4"
             if transcode_options is not None:    
                 req_handler.transcode_options = transcode_options
 

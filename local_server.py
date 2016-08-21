@@ -90,6 +90,7 @@ class TranscodingRequestHandler(RequestHandler):
     """ Handle HTTP requests for files which require realtime transcoding with ffmpeg """
     transcoder_command = FFMPEG
     transcode_options = ""
+    content_type = "video/mp4"
                     
     def write_response(self, filepath):
 
@@ -111,7 +112,11 @@ class TranscodingRequestHandler(RequestHandler):
     def send_headers(self, filepath):
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
-        self.send_header("Transfer-Encoding", "chunked")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-type", self.content_type)
+        self.send_header("Accept-Encoding", "*")
+        self.send_header("Content-length", content_length)
+        self.send_header("Range", "bytes=0-%s"%(content_length))
         self.end_headers()
 
