@@ -33,17 +33,28 @@ class ImageRequestHandler(http.server.BaseHTTPRequestHandler):
 
 
 class SubtitleRequestHandler(http.server.BaseHTTPRequestHandler):
-    content = b""
+    content = "text/html"
     
     def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
+        filepath = urllib.parse.unquote_plus(self.path)
+        
+        self.send_headers(filepath)       
+        self.write_response(filepath)
+
+
+    def send_headers(self, filepath):
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.wfile.write(self.content)
+        self.send_header("Content-type", self.content_type)
+        self.send_header("Accept-Encoding", "*")
+        self.send_header("Content-length", str(os.path.getsize(filepath)))
         self.end_headers()
-        return
+
+
+    def write_response(self, filepath):
+        with open(filepath, "br") as f: 
+            self.wfile.write(f.read())
 
 
 class RequestHandler(http.server.BaseHTTPRequestHandler):
@@ -58,10 +69,15 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
 
     def send_headers(self, filepath):
+        content_length = str(os.path.getsize(filepath))
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
-        self.send_header("Content-length", str(os.path.getsize(filepath)))
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-type", self.content_type)
+        self.send_header("Accept-Encoding", "*")
+        self.send_header("Content-length", content_length)
+        self.send_header("Range", "bytes=0-%s"%(content_length))
         self.end_headers()
 
 
