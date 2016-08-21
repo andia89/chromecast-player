@@ -213,7 +213,6 @@ class PlaylistManager(Gtk.Window):
         self.delete_at_index(index)
         if plc == index and self.show_image:
             self.show_image = False
-            self.store[index][0] = None
         self.selection_index = index - 1
         popped = self.play_uri.pop(index)
         self.playlist_changed = True

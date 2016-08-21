@@ -1,5 +1,29 @@
 #!/usr/bin/python3
 
+"""
+stream2chromecast.py: Chromecast media streamer for Linux
+author: wa4557 - https://github.com/wa4557/chromecast-player
+version: 0.1
+"""
+
+# Copyright (C) 2016 wa4557
+#
+# This file is part of chromecast-player.
+#
+# chromecast-player is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# chromecast-player is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with chromecast-player.  If not, see <http://www.gnu.org/licenses/>.
+
+
 from gi import require_version
 require_version("Gtk", "3.0")
 require_version("Notify", "0.7")
@@ -37,6 +61,7 @@ class ChromecastPlayer(Gtk.Application):
         self.play_now = True if uri else False
         self.play_uri = []
         self.serverthread = None
+        self.subtitlethread = None
         self.local_port = 0
         self.show_gui = show_gui
         self.imagethread = None
@@ -686,7 +711,7 @@ class ChromecastPlayer(Gtk.Application):
             self.transcoder = None
             self.probe = None
         self.preferred_transcoder = chromecast_config["preferred_transcoder"]
-        self.local_port = chromecast_config["local_port"]
+        self.local_port = chromecast_config["local_port"] if chromecast_config["local_port"] else None
         self.transcoder, self.probe = helpers.get_transcoder_cmds(preferred_transcoder=self.preferred_transcoder)
         self.transcoder = chromecast_config['enable_transcoding']
 
@@ -719,7 +744,10 @@ class ChromecastPlayer(Gtk.Application):
             self.cast.wait()
             self.mc = self.cast.media_controller
             time.sleep(0.2)
-            self.check_already_playing()
+            try:
+                self.check_already_playing()
+            except:
+                pass
 
 
     def check_already_playing(self):
@@ -776,7 +804,9 @@ class ChromecastPlayer(Gtk.Application):
             elif transcoder == "avconv":   
                 req_handler = local_server.TranscodingRequestHandler
                 req_handler.transcoder_command = AVCONV
-            
+            else:
+                return
+
             if transcode_options is not None:    
                 req_handler.transcode_options = transcode_options
 
@@ -811,6 +841,30 @@ class ChromecastPlayer(Gtk.Application):
         self.imagethread.start()
 
         url = "http://%s:%s" % (webserver_ip, str(server.server_port))
+        
+        return url
+
+
+    def local_sub(self, filename, mimetype):
+        """serve a local subtitle file"""
+
+        if os.path.isfile(filename):
+            filename = os.path.abspath(filename)
+        else:
+            return None
+
+        webserver_ip =[(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+        
+        req_handler = local_server.SubtitleRequestHandler
+
+        # create a webserver to handle a single request on a free port or a specific port if passed in the parameter   
+        port = 0    
+
+        server = http.server.HTTPServer((webserver_ip, port), req_handler)
+        self.subtitlethread = threading.Thread(target=server.handle_request)
+        self.subtitlethread.start()    
+
+        url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
         
         return url
 
