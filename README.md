@@ -1,13 +1,16 @@
 # Chromecast-player
 
-Chromecast-player written using Python3.x and PyGTK. The player allows you to play local files from your computer and network streams which are parsed using `youtube-dl`. The player supports playlists, changing volume, connecting to different chromecasts, and on the fly conversion of local files (using ffmpeg or avconv) with media types not supported by chromecast.
+Chromecast-player written using Python3.x and PyGTK. The player allows you to play local files from your computer and network streams which are parsed using `youtube-dl`. The player supports playlists, changing volume, connecting to different chromecasts, and on the fly conversion of local files (using ffmpeg or avconv) with media types not supported by chromecast. 
 
-The app also detects metadata and thumbnails of local files send to the chromecast, and displays these informations on your TV. 
+
+Included is also a playlist-manager that allows changing the current playlist and adding new files / network streams.
+
+The app also detects metadata and thumbnails of local files send to the chromecast, and displays these informations on your TV when playing music. 
 
 ### NOTE: This is still a very early beta, so there will be bugs!!! Feel free to report them here :)
 
 ##Dependencies
-The script needs Python3.x to run, and relies on `pychromecast` that does the communicating with the chromecast. Apart from that I tried to use standard python libraries. If you want to play network streams, you need a version of `youtube-dl` somewhere in your `$PATH`
+The script needs Python3.x to run, and relies on `pychromecast` that does the communicating with the chromecast. Apart from that I tried to use standard python libraries. If you want to play network streams, you need a version of `youtube-dl` somewhere in your `$PATH` For transcoding unsupported filetypes you either need `ffmpeg` or `àvconv` installed.
 
 ##Usage
 Just download the repo, `cd` into the folder and run:
@@ -15,7 +18,6 @@ Just download the repo, `cd` into the folder and run:
 ```
 ./player.py
 ```
-
 
 You can pass uris (either local files or network streams) directly on the command line
 
