@@ -1,20 +1,13 @@
 import sys, os
 import signal
-
 import time
-
 import http.server
 import urllib.request, urllib.parse, urllib.error
 import mimetypes
 from threading import Thread
-
 import subprocess
-
 import http.client
 import urllib.parse
-import pychromecast.controllers
-import pychromecast.controllers.media as media
-
 import select
 
 
