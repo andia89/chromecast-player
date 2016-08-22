@@ -12,6 +12,8 @@ import subprocess
 
 import http.client
 import urllib.parse
+import pychromecast.controllers
+import pychromecast.controllers.media as media
 
 import select
 
