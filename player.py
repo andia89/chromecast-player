@@ -65,7 +65,6 @@ class ChromecastPlayer(Gtk.Application):
         self.local_port = 0
         self.show_gui = show_gui
         self.imagethread = None
-        self.already_playing = False
         self.transcode_options = None
         self.playlist_manager = None
         if uri and not isinstance(uri, (list, tuple)):
@@ -722,9 +721,6 @@ class ChromecastPlayer(Gtk.Application):
             return
         self.mc.stop()
         self.cast.wait()
-        if self.already_playing:
-            self.cast.register_handler(local_server.MediaController())
-            self.already_playing = False
         if self.serverthread:
             while self.serverthread.isAlive():
                 self.serverthread.join()
@@ -753,9 +749,6 @@ class ChromecastPlayer(Gtk.Application):
                 self.check_already_playing()
             except:
                 pass
-            if not self.already_playing:
-                self.already_playing = False
-
 
     def check_already_playing(self):
         self.mc.update_status()
@@ -789,7 +782,6 @@ class ChromecastPlayer(Gtk.Application):
                 metadata['albumArtist'] = self.mc.status.album_artist
             except:
                 pass
-            self.already_playing = True
             self.play_uri.append([None, False, self.mc.status.content_type, False, metadata, None, None])
 
     def local_url(self, filename, transcode=False, transcoder=None, transcode_options=None, server_port=None):
