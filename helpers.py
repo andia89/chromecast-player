@@ -6,7 +6,7 @@ import os
 from urllib.parse import urlparse, unquote, quote_plus
 
 supported_picture_formats = {'mjpeg': 'jpg', 'png':'png', 'jpeg':'jpg','jpg':'jpg', 'gif':'gif', 'webp':'webp'}
-supported_formats = {'mp4':('video/mp4', 0, 'audio/mp4'), 'webm':('video/webm', 1, None), 'ogg':('audio/ogg', 2, None), 'flac':("audio/flac", 1.5, None),'aac':("audio/aac", 1.8, None), 'flac':("audio/x-flac", 1.6, None), 'mp3':('audio/mpeg', 3, None), 'wav':('audio/wav', 4, None)}
+supported_formats = {'mp4':('video/mp4', 0), 'webm':('video/webm', 1), 'ogg':('audio/ogg', 2), 'flac_2':("audio/flac", 1.5),'aac':("audio/aac", 1.8), 'flac':("audio/x-flac", 1.6), 'mp3':('audio/mpeg', 3), 'wav':('audio/wav', 4), 'mp4_2':('audio/mp4', 5)}
 
 
 def get_mimetype(filename, ffprobe_cmd=None):
@@ -157,8 +157,9 @@ def decode_local_uri(uri, transcoder, probe, preferred_transcoder):
     transcode = False
     if transcoder:
         transcode = True
+    print(supported_formats.keys())
     for k in supported_formats.keys():
-        if mime == supported_formats[k][0] or mime == supported_formats[k][2]:
+        if mime == supported_formats[k][0]:
             transcode = False
     metadata = None
     thumb = None
