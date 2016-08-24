@@ -265,8 +265,7 @@ class ChromecastPlayer(Gtk.Application):
         self.pause.connect("clicked", self._on_pause_clicked)
         self.stop.connect("clicked", self._on_stop_clicked)
         self.progressbar.connect("value_changed", self._slider_changed)
-        #self.volume.connect("value_changed", self._volume_changed)
-        self.volume.connect("popup", self.test)
+        self.volume.connect("value_changed", self._volume_changed)
         self.clients_combo.connect("changed", self._combo_changed_clients)
         self.playlist.connect("clicked", self._on_playlist_clicked)
         refresh.connect("clicked", self._on_refresh_clicked)
@@ -285,8 +284,6 @@ class ChromecastPlayer(Gtk.Application):
             self.win.show_all()
         self.add_window(self.win)
 
-    def test(self, *args):
-        print("test")
 
     def _on_preferences_clicked(self, *args):
         win = preferences.Preferences()
@@ -628,7 +625,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.is_disconnected = False
                     self.label.set_label("0:00/0:00")
                     self.stop.set_sensitive(False)
-                    #self.volume.set_sensitive(False)
+                    self.volume.set_sensitive(False)
                     self.volume.handler_block_by_func(self._volume_changed)
                     self.volume.set_value(0)
                     self.volume.handler_unblock_by_func(self._volume_changed)
@@ -655,7 +652,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.label.set_label("0:00/0:00")
                     self.stop.set_sensitive(False)
                     self.pause.set_sensitive(False)
-                    #self.volume.set_sensitive(False)
+                    self.volume.set_sensitive(False)
                     self.volume.handler_block_by_func(self._volume_changed)
                     self.volume.set_value(0)
                     self.volume.handler_unblock_by_func(self._volume_changed)
@@ -681,7 +678,7 @@ class ChromecastPlayer(Gtk.Application):
                 self.disconnect.set_sensitive(False)
                 self.label.set_label("00:00/00:00")
                 self.pause.set_sensitive(False)
-                #self.volume.set_sensitive(False)
+                self.volume.set_sensitive(False)
                 self.volume.handler_block_by_func(self._volume_changed)
                 self.volume.set_value(0)
                 self.volume.handler_unblock_by_func(self._volume_changed)
@@ -830,7 +827,7 @@ class ChromecastPlayer(Gtk.Application):
         req_handler.content_type = mimetype
         req_handler.content = bitstream
 
-        server = http.server.HTTPServer((webserver_ip, port), req_handler)#
+        server = http.server.HTTPServer((webserver_ip, port), req_handler)
         server.socket.settimeout(10)
         self.imagethread = threading.Thread(target=server.handle_request)
         self.imagethread.start()
