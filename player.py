@@ -265,7 +265,8 @@ class ChromecastPlayer(Gtk.Application):
         self.pause.connect("clicked", self._on_pause_clicked)
         self.stop.connect("clicked", self._on_stop_clicked)
         self.progressbar.connect("value_changed", self._slider_changed)
-        self.volume.connect("value_changed", self._volume_changed)
+        #self.volume.connect("value_changed", self._volume_changed)
+        self.volume.connect("popup", self.test)
         self.clients_combo.connect("changed", self._combo_changed_clients)
         self.playlist.connect("clicked", self._on_playlist_clicked)
         refresh.connect("clicked", self._on_refresh_clicked)
@@ -284,6 +285,8 @@ class ChromecastPlayer(Gtk.Application):
             self.win.show_all()
         self.add_window(self.win)
 
+    def test(self, *args):
+        print("test")
 
     def _on_preferences_clicked(self, *args):
         win = preferences.Preferences()
@@ -334,9 +337,6 @@ class ChromecastPlayer(Gtk.Application):
         if self.cast:
             if self.is_playing or self.is_paused:
                 self.mc.stop()
-                if self.serverthread:
-                    while self.serverthread.isAlive():
-                        self.serverthread.join()
         self.playlist_counter = 0
         self.play_uri = []
         if self.playlist_manager:
@@ -493,9 +493,6 @@ class ChromecastPlayer(Gtk.Application):
                 self.overwrite = True
                 self.playlist_counter = 0
                 self.mc.stop()
-                if self.serverthread:
-                    while self.serverthread.isAlive():
-                        self.serverthread.join()
 
 
     def _on_prev_clicked(self, *args):
@@ -631,7 +628,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.is_disconnected = False
                     self.label.set_label("0:00/0:00")
                     self.stop.set_sensitive(False)
-                    self.volume.set_sensitive(False)
+                    #self.volume.set_sensitive(False)
                     self.volume.handler_block_by_func(self._volume_changed)
                     self.volume.set_value(0)
                     self.volume.handler_unblock_by_func(self._volume_changed)
@@ -658,7 +655,7 @@ class ChromecastPlayer(Gtk.Application):
                     self.label.set_label("0:00/0:00")
                     self.stop.set_sensitive(False)
                     self.pause.set_sensitive(False)
-                    self.volume.set_sensitive(False)
+                    #self.volume.set_sensitive(False)
                     self.volume.handler_block_by_func(self._volume_changed)
                     self.volume.set_value(0)
                     self.volume.handler_unblock_by_func(self._volume_changed)
@@ -684,7 +681,7 @@ class ChromecastPlayer(Gtk.Application):
                 self.disconnect.set_sensitive(False)
                 self.label.set_label("00:00/00:00")
                 self.pause.set_sensitive(False)
-                self.volume.set_sensitive(False)
+                #self.volume.set_sensitive(False)
                 self.volume.handler_block_by_func(self._volume_changed)
                 self.volume.set_value(0)
                 self.volume.handler_unblock_by_func(self._volume_changed)
@@ -721,17 +718,11 @@ class ChromecastPlayer(Gtk.Application):
             return
         self.mc.stop()
         self.cast.wait()
-        if self.serverthread:
-            while self.serverthread.isAlive():
-                self.serverthread.join()
         if self.play_uri[self.playlist_counter][1]:
             url = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
             thumb = self.play_uri[self.playlist_counter][5]
             image_url = None
             if thumb:
-                if self.imagethread:
-                    while self.imagethread.isAlive():
-                        self.imagethread.join()
                 image_url = self.local_thumb(thumb, self.play_uri[self.playlist_counter][6])
             self.mc.play_media(url, self.play_uri[self.playlist_counter][2], metadata=self.play_uri[self.playlist_counter][4], thumb=image_url)
         else:
@@ -749,6 +740,7 @@ class ChromecastPlayer(Gtk.Application):
                 self.check_already_playing()
             except:
                 pass
+
 
     def check_already_playing(self):
         self.mc.update_status()
@@ -814,13 +806,15 @@ class ChromecastPlayer(Gtk.Application):
         port = 0    
         if server_port is not None:
             port = int(server_port)
-            
-        server = http.server.HTTPServer((webserver_ip, port), req_handler)
-        self.serverthread = threading.Thread(target=server.handle_request)
-        self.serverthread.start()    
+        try:
+            server = http.server.HTTPServer((webserver_ip, port), req_handler)
+            server.socket.settimeout(10)
+            self.serverthread = threading.Thread(target=server.handle_request)
+            self.serverthread.start()
+            url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
+        except OSError:
+            url = "http://%s:%s%s" % (webserver_ip, str(server_port), quote_plus(filename, "/"))
 
-        url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
-        
         return url
 
 
@@ -836,7 +830,8 @@ class ChromecastPlayer(Gtk.Application):
         req_handler.content_type = mimetype
         req_handler.content = bitstream
 
-        server = http.server.HTTPServer((webserver_ip, port), req_handler)
+        server = http.server.HTTPServer((webserver_ip, port), req_handler)#
+        server.socket.settimeout(10)
         self.imagethread = threading.Thread(target=server.handle_request)
         self.imagethread.start()
 
@@ -861,11 +856,11 @@ class ChromecastPlayer(Gtk.Application):
         port = 0    
 
         server = http.server.HTTPServer((webserver_ip, port), req_handler)
+        server.socket.settimeout(10)
         self.subtitlethread = threading.Thread(target=server.handle_request)
         self.subtitlethread.start()    
 
         url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
-        
         return url
 
 
