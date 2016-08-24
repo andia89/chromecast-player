@@ -157,7 +157,6 @@ def decode_local_uri(uri, transcoder, probe, preferred_transcoder):
     transcode = False
     if transcoder:
         transcode = True
-    print(supported_formats.keys())
     for k in supported_formats.keys():
         if mime == supported_formats[k][0]:
             transcode = False
