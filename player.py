@@ -42,8 +42,11 @@ import http.server
 import os
 import socket
 
-FFMPEG = 'ffmpeg -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
-AVCONV = 'avconv -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
+FFMPEG_VIDEO = 'ffmpeg -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
+AVCONV_VIDEO = 'avconv -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
+
+FFMPEG_AUDIO = 'ffmpeg -i "%s" -strict -2 -preset ultrafast -codec:a aac -frag_duration 3000 -b:v 2000k -loglevel error %s -'
+AVCONV_AUDIO = 'avconv -i "%s" -strict -2 -preset ultrafast -codec:a aac -frag_duration 3000 -b:v 2000k -loglevel error %s -'
 
 class ChromecastPlayer(Gtk.Application):
 
@@ -787,15 +790,23 @@ class ChromecastPlayer(Gtk.Application):
         req_handler = local_server.RequestHandler
         req_handler.content_type = mimetype
         if transcode:
-            if transcoder == "ffmpeg":  
-                req_handler = local_server.TranscodingRequestHandler
-                req_handler.transcoder_command = FFMPEG
+            req_handler = local_server.TranscodingRequestHandler
+            if transcoder == "ffmpeg":
+                if mimetype.startswith("audio"):
+                    req_handler.transcoder_command = FFMPEG_AUDIO
+                else:
+                    req_handler.transcoder_command = FFMPEG_VIDEO
             elif transcoder == "avconv":   
-                req_handler = local_server.TranscodingRequestHandler
-                req_handler.transcoder_command = AVCONV
+                if mimetype.startswith("audio"):
+                    req_handler.transcoder_command = AVCONV_AUDIO
+                else:
+                    req_handler.transcoder_command = AVCONV_VIDEO
             else:
                 return
-            req_handler.content_type = "video/mp4"
+            if mimetype.startswith("audio"):
+                req_handler.content_type = "audio/mp4"
+            else:
+                req_handler.content_type = "video/mp4"
             if transcode_options is not None:    
                 req_handler.transcode_options = transcode_options
 
