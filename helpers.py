@@ -6,7 +6,7 @@ import os
 from urllib.parse import urlparse, unquote, quote_plus
 
 supported_picture_formats = {'mjpeg': 'jpg', 'png':'png', 'jpeg':'jpg','jpg':'jpg', 'gif':'gif', 'webp':'webp'}
-supported_formats = {'mp4':('video/mp4', 0), 'webm':('video/webm', 1), 'ogg':('audio/ogg', 2), 'flac':("audio/flac", 1.5),'flac':("audio/x-flac", 1.6), 'mp3':('audio/mpeg', 3), 'wav':('audio/wav', 4)}
+supported_formats = {'mp4':('video/mp4', 0, 'audio/mp4'), 'webm':('video/webm', 1, None), 'ogg':('audio/ogg', 2, None), 'flac':("audio/flac", 1.5, None),'aac':("audio/aac", 1.8, None), 'flac':("audio/x-flac", 1.6, None), 'mp3':('audio/mpeg', 3, None), 'wav':('audio/wav', 4, None)}
 
 
 def get_mimetype(filename, ffprobe_cmd=None):
@@ -26,7 +26,6 @@ def get_mimetype(filename, ffprobe_cmd=None):
         file_mimetype = subprocess.check_output(file_cmd, shell=True).strip().lower().decode('utf-8')
         if file_mimetype.startswith("video/") or file_mimetype.startswith("audio/"):
             mimetype = file_mimetype
-            return mimetype
     except:
         pass
 
@@ -39,17 +38,18 @@ def get_mimetype(filename, ffprobe_cmd=None):
     has_audio = False
     format_name = None
     
-    ffprobe_cmd = '%s -show_streams -show_format "%s"' % (ffprobe_cmd, filename)
+    ffprobe_cmd = '%s -show_streams -show_format -print_format json -v quiet "%s"' % (ffprobe_cmd, filename)
     ffmpeg_process = subprocess.Popen(ffprobe_cmd, stdout=subprocess.PIPE, shell=True)
-    for line in ffmpeg_process.stdout:
-        l = line.decode('utf-8')
-        if l.startswith("codec_type=audio"):
+    com = ffmpeg_process.communicate()[0]
+    dicti = json.loads(com.decode('utf-8'))
+    for stream in dicti['streams']:
+        if stream['codec_type'] == 'video':
+            if stream['codec_name'] not in supported_picture_formats.keys():
+                has_video = True
+                format_name = stream['codec_name']
+        if stream['codec_type'] == 'audio':
             has_audio = True
-        elif l.startswith("codec_type=video"):
-            has_video = True    
-        elif l.startswith("format_name="):
-            name, value = l.split("=")
-            format_name = value.strip().lower().split(",")
+            format_name = stream['codec_name']
 
     # use the default if it isn't possible to identify the format type
     if format_name is None:
@@ -62,6 +62,10 @@ def get_mimetype(filename, ffprobe_cmd=None):
         
     if "mp4" in format_name:
         mimetype += "mp4"
+    elif "h264" in format_name:
+        mimetype = "video/mp4"
+    elif "aac" in format_name:
+        mimetype = "audio/aac"
     elif "webm" in format_name:
         mimetype += "webm"
     elif "ogg" in format_name:
@@ -154,7 +158,7 @@ def decode_local_uri(uri, transcoder, probe, preferred_transcoder):
     if transcoder:
         transcode = True
     for k in supported_formats.keys():
-        if mime == supported_formats[k][0]:
+        if mime == supported_formats[k][0] or mime == supported_formats[k][2]:
             transcode = False
     metadata = None
     thumb = None
@@ -178,7 +182,7 @@ def get_metadata(filename, mime, preferred_transcoder):
         info = json.loads(ret)
         thumb = None
         image_mime = None
-        if info['format']['tags']:
+        if 'tags' in info['format']:
             for line in info['format']['tags']:
                 if re.search('title', line, re.IGNORECASE):
                     metadata['title'] = info['format']['tags'][line]
@@ -223,7 +227,7 @@ def get_metadata(filename, mime, preferred_transcoder):
         ret = proc.communicate()
         ret = ret[0].decode('utf-8')
         info = json.loads(ret)
-        if info['format']['tags']:
+        if 'tags' in info['format']:
             for line in info['format']['tags']:
                 if re.search('title', line, re.IGNORECASE):
                     metadata['title'] = info['format']['tags'][line]

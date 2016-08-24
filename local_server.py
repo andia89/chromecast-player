@@ -28,7 +28,7 @@ class ImageRequestHandler(http.server.BaseHTTPRequestHandler):
 
 
 class SubtitleRequestHandler(http.server.BaseHTTPRequestHandler):
-    content = "text/html"
+    content_type = "text/vtt"
     
     def do_GET(self):
         filepath = urllib.parse.unquote_plus(self.path)
@@ -108,10 +108,6 @@ class TranscodingRequestHandler(RequestHandler):
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Accept-Ranges", "bytes")
         self.send_header("Content-type", self.content_type)
         self.send_header("Accept-Encoding", "*")
-        self.send_header("Content-length", content_length)
-        self.send_header("Range", "bytes=0-%s"%(content_length))
         self.end_headers()
-
