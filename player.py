@@ -719,6 +719,18 @@ class ChromecastPlayer(Gtk.Application):
         self.mc.stop()
         self.cast.wait()
         if self.play_uri[self.playlist_counter][1]:
+            if self.serverthread:
+                self.fileserver.socket.shutdown(socket.SHUT_RDWR)
+                self.fileserver.socket.close()
+                self.serverthread.join()
+            if self.imagethread:
+                self.imageserver.socket.shutdown(socket.SHUT_RDWR)
+                self.imageserver.socket.close()
+                self.imagethread.join()
+            if self.subtitlethread:
+                self.subtitleserver.socket.shutdown(socket.SHUT_RDWR)
+                self.subtitleserver.socket.close()
+                self.subtitlethread.join()
             url = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
             thumb = self.play_uri[self.playlist_counter][5]
             image_url = None
@@ -814,14 +826,11 @@ class ChromecastPlayer(Gtk.Application):
         port = 0    
         if server_port is not None:
             port = int(server_port)
-        try:
-            server = http.server.HTTPServer((webserver_ip, port), req_handler)
-            server.socket.settimeout(10)
-            self.serverthread = threading.Thread(target=server.handle_request)
-            self.serverthread.start()
-            url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
-        except OSError:
-            url = "http://%s:%s%s" % (webserver_ip, str(server_port), quote_plus(filename, "/"))
+        self.fileserver = http.server.HTTPServer((webserver_ip, port), req_handler)
+        #server.socket.settimeout(10)
+        self.serverthread = threading.Thread(target=self.fileserver.handle_request)
+        self.serverthread.start()
+        url = "http://%s:%s%s" % (webserver_ip, str(self.fileserver.server_port), quote_plus(filename, "/"))
 
         return url
 
@@ -838,12 +847,12 @@ class ChromecastPlayer(Gtk.Application):
         req_handler.content_type = mimetype
         req_handler.content = bitstream
 
-        server = http.server.HTTPServer((webserver_ip, port), req_handler)
-        server.socket.settimeout(10)
-        self.imagethread = threading.Thread(target=server.handle_request)
+        self.imageserver = http.server.HTTPServer((webserver_ip, port), req_handler)
+        #server.socket.settimeout(10)
+        self.imagethread = threading.Thread(target=self.imageserver.handle_request)
         self.imagethread.start()
 
-        url = "http://%s:%s" % (webserver_ip, str(server.server_port))
+        url = "http://%s:%s" % (webserver_ip, str(self.imageserver.server_port))
         
         return url
 
@@ -863,12 +872,12 @@ class ChromecastPlayer(Gtk.Application):
         # create a webserver to handle a single request on a free port or a specific port if passed in the parameter   
         port = 0    
 
-        server = http.server.HTTPServer((webserver_ip, port), req_handler)
-        server.socket.settimeout(10)
-        self.subtitlethread = threading.Thread(target=server.handle_request)
+        self.subtitleserver = http.server.HTTPServer((webserver_ip, port), req_handler)
+        #server.socket.settimeout(10)
+        self.subtitlethread = threading.Thread(target=self.subtitleserver.handle_request)
         self.subtitlethread.start()    
 
-        url = "http://%s:%s%s" % (webserver_ip, str(server.server_port), quote_plus(filename, "/"))
+        url = "http://%s:%s%s" % (webserver_ip, str(self.subtitleserver.server_port), quote_plus(filename, "/"))
         return url
 
 
