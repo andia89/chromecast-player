@@ -42,11 +42,11 @@ import http.server
 import os
 import socket
 
-FFMPEG_VIDEO = 'ffmpeg -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
-AVCONV_VIDEO = 'avconv -i "%s" -strict -2 -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
+FFMPEG_VIDEO = ['ffmpeg', '-i', '-f', 'mp4', '-strict', '-2', '-preset', 'ultrafast', '-frag_duration', '3000', '-b:v', '2000k', '-loglevel', 'error', 'pipe:1']
+AVCONV_VIDEO = ['avconv', '-i', '-f', 'mp4', '-strict', '-2', '-preset', 'ultrafast', '-frag_duration', '3000', '-b:v', '2000k', '-loglevel', 'error', 'pipe:1']
 
-FFMPEG_AUDIO = 'ffmpeg -i "%s" -strict -2 -preset ultrafast -codec:a aac -frag_duration 3000 -b:v 2000k -loglevel error %s -'
-AVCONV_AUDIO = 'avconv -i "%s" -strict -2 -preset ultrafast -codec:a aac -frag_duration 3000 -b:v 2000k -loglevel error %s -'
+FFMPEG_AUDIO = ['ffmpeg', '-i', '-codec:a', 'aac', '-strict', '-2', '-preset', 'ultrafast', '-frag_duration', '3000', '-b:v 2000k', '-loglevel', 'error', 'pipe:1']
+AVCONV_AUDIO = ['avconv', '-i', '-codec:a', 'aac', '-strict', '-2', '-preset', 'ultrafast', '-frag_duration', '3000', '-b:v 2000k', '-loglevel', 'error', 'pipe:1']
 
 class ChromecastPlayer(Gtk.Application):
 
@@ -720,16 +720,25 @@ class ChromecastPlayer(Gtk.Application):
         self.cast.wait()
         if self.play_uri[self.playlist_counter][1]:
             if self.serverthread:
-                self.fileserver.socket.shutdown(socket.SHUT_RDWR)
-                self.fileserver.socket.close()
+                try:
+                    self.fileserver.socket.shutdown(socket.SHUT_RDWR)
+                    self.fileserver.socket.close()
+                except:
+                    pass
                 self.serverthread.join()
             if self.imagethread:
-                self.imageserver.socket.shutdown(socket.SHUT_RDWR)
-                self.imageserver.socket.close()
+                try:
+                    self.imageserver.socket.shutdown(socket.SHUT_RDWR)
+                    self.imageserver.socket.close()
+                except:
+                    pass 
                 self.imagethread.join()
             if self.subtitlethread:
-                self.subtitleserver.socket.shutdown(socket.SHUT_RDWR)
-                self.subtitleserver.socket.close()
+                try:
+                    self.subtitleserver.socket.shutdown(socket.SHUT_RDWR)
+                    self.subtitleserver.socket.close()
+                except:
+                    pass
                 self.subtitlethread.join()
             url = self.local_url(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][3], self.transcoder, self.transcode_options, self.local_port)
             thumb = self.play_uri[self.playlist_counter][5]
@@ -799,35 +808,35 @@ class ChromecastPlayer(Gtk.Application):
         mimetype = helpers.get_mimetype(filename, self.probe)
         webserver_ip =[(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
         
-        req_handler = local_server.RequestHandler
-        req_handler.content_type = mimetype
         if transcode:
             req_handler = local_server.TranscodingRequestHandler
             if transcoder == "ffmpeg":
                 if mimetype.startswith("audio"):
-                    req_handler.transcoder_command = FFMPEG_AUDIO
+                    command = FFMPEG_AUDIO[:]
                 else:
-                    req_handler.transcoder_command = FFMPEG_VIDEO
+                    command = FFMPEG_VIDEO[:]
             elif transcoder == "avconv":   
                 if mimetype.startswith("audio"):
-                    req_handler.transcoder_command = AVCONV_AUDIO
+                    command = AVCONV_AUDIO[:]
                 else:
-                    req_handler.transcoder_command = AVCONV_VIDEO
+                    command = AVCONV_VIDEO[:]
             else:
                 return
             if mimetype.startswith("audio"):
                 req_handler.content_type = "audio/mp4"
             else:
                 req_handler.content_type = "video/mp4"
-            if transcode_options is not None:    
-                req_handler.transcode_options = transcode_options
-
+            if transcode_options is not None:
+                command.insert(-1, transcode_options)
+            req_handler.transcoder_command = command
+        else:
+            req_handler = local_server.RequestHandler
+            req_handler.content_type = mimetype
         # create a webserver to handle a single request on a free port or a specific port if passed in the parameter   
         port = 0    
         if server_port is not None:
             port = int(server_port)
         self.fileserver = http.server.HTTPServer((webserver_ip, port), req_handler)
-        #server.socket.settimeout(10)
         self.serverthread = threading.Thread(target=self.fileserver.handle_request)
         self.serverthread.start()
         url = "http://%s:%s%s" % (webserver_ip, str(self.fileserver.server_port), quote_plus(filename, "/"))
@@ -848,7 +857,6 @@ class ChromecastPlayer(Gtk.Application):
         req_handler.content = bitstream
 
         self.imageserver = http.server.HTTPServer((webserver_ip, port), req_handler)
-        #server.socket.settimeout(10)
         self.imagethread = threading.Thread(target=self.imageserver.handle_request)
         self.imagethread.start()
 
@@ -873,7 +881,6 @@ class ChromecastPlayer(Gtk.Application):
         port = 0    
 
         self.subtitleserver = http.server.HTTPServer((webserver_ip, port), req_handler)
-        #server.socket.settimeout(10)
         self.subtitlethread = threading.Thread(target=self.subtitleserver.handle_request)
         self.subtitlethread.start()    
 

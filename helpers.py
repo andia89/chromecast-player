@@ -26,6 +26,8 @@ def get_mimetype(filename, ffprobe_cmd=None):
         file_mimetype = subprocess.check_output(file_cmd, shell=True).strip().lower().decode('utf-8')
         if file_mimetype.startswith("video/") or file_mimetype.startswith("audio/"):
             mimetype = file_mimetype
+            if not 'matroska' in mimetype or 'mkv' in mimetype:
+                return mimetype
     except:
         pass
 
@@ -43,27 +45,27 @@ def get_mimetype(filename, ffprobe_cmd=None):
     com = ffmpeg_process.communicate()[0]
     dicti = json.loads(com.decode('utf-8'))
     for stream in dicti['streams']:
+        if stream['codec_type'] == 'audio':
+            has_audio = True
+            if not format_name:
+                format_name = stream['codec_name']
         if stream['codec_type'] == 'video':
             if stream['codec_name'] not in supported_picture_formats.keys():
                 has_video = True
                 format_name = stream['codec_name']
-        if stream['codec_type'] == 'audio':
-            has_audio = True
-            format_name = stream['codec_name']
-
     # use the default if it isn't possible to identify the format type
     if format_name is None:
         return mimetype
-
     if has_video:
         mimetype = "video/"
     else:
         mimetype = "audio/"
-        
     if "mp4" in format_name:
         mimetype += "mp4"
-    elif "h264" in format_name:
-        mimetype = "video/mp4"
+    elif "mpeg4" in format_name:
+        mimetype += "mpeg4"
+    elif "flv" in format_name:
+        mimetype = "video/flv"
     elif "aac" in format_name:
         mimetype = "audio/aac"
     elif "webm" in format_name:

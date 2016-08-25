@@ -12,9 +12,6 @@ import select
 
 
 
-FFMPEG = 'ffmpeg -i "%s" -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
-AVCONV = 'avconv -i "%s" -preset ultrafast -f mp4 -frag_duration 3000 -b:v 2000k -loglevel error %s -'
-
 
 class ImageRequestHandler(http.server.BaseHTTPRequestHandler):
     content_type = "image/png"
@@ -83,15 +80,12 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
 class TranscodingRequestHandler(RequestHandler):
     """ Handle HTTP requests for files which require realtime transcoding with ffmpeg """
-    transcoder_command = FFMPEG
-    transcode_options = ""
+    transcoder_command = ""
     content_type = "video/mp4"
-                    
-    def write_response(self, filepath):
 
-        ffmpeg_command = self.transcoder_command % (filepath, self.transcode_options) 
-        
-        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, shell=True)       
+    def write_response(self, filepath):
+        self.transcoder_command.insert(2, filepath)
+        ffmpeg_process = subprocess.Popen(self.transcoder_command, stdout=subprocess.PIPE)
 
         for line in ffmpeg_process.stdout:
             chunk_size = "%0.2X" % len(line)
@@ -99,7 +93,6 @@ class TranscodingRequestHandler(RequestHandler):
             self.wfile.write("\r\n".encode())
             self.wfile.write(line) 
             self.wfile.write("\r\n".encode())
-            
         self.wfile.write("0".encode())
         self.wfile.write("\r\n\r\n".encode())
         
