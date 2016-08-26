@@ -60,6 +60,7 @@ class ChromecastPlayer(Gtk.Application):
         self.cast = None
         self.mc = None
         self.get_chromecast_config()
+        self.get_subtitle_config()
         self.uri = None
         self.play_now = True if uri else False
         self.play_uri = []
@@ -306,6 +307,7 @@ class ChromecastPlayer(Gtk.Application):
             self.playlist_manager.transcoder = self.transcoder
             self.playlist_manager.probe = self.probe
             self.playlist_manager.preferred_transcoder = self.preferred_transcoder
+        self.get_subtitle_config()
 
 
     def _on_disconnect_clicked(self, *args):
@@ -507,7 +509,7 @@ class ChromecastPlayer(Gtk.Application):
         self.seeking = True
         widget = args[0]
         value = widget.get_value()
-        if self.is_playing or self.is_paused and self.mc.supports_seek:
+        if self.is_playing or self.is_paused and self.mc.status.supports_seek:
             dur = self.mc.status.duration
             curr = self.mc.status.current_time
             self.mc.seek(value*dur)
@@ -713,6 +715,14 @@ class ChromecastPlayer(Gtk.Application):
         self.transcoder = chromecast_config['enable_transcoding']
 
 
+    def get_subtitle_config(self):
+        conf = preferences.get_config('subtitle_style')
+        conf['fontScale'] = float(conf['fontScale'])
+        self.style = conf
+        if self.mc:
+            self.mc.style_subtitles(self.style)
+
+
     def play_media(self):
         if self.play_uri[self.playlist_counter][0] is None:
             return
@@ -745,7 +755,7 @@ class ChromecastPlayer(Gtk.Application):
             image_url = None
             if thumb:
                 image_url = self.local_thumb(thumb, self.play_uri[self.playlist_counter][6])
-            self.mc.play_media(url, self.play_uri[self.playlist_counter][2], metadata=self.play_uri[self.playlist_counter][4], thumb=image_url)
+            self.mc.play_media(url, self.play_uri[self.playlist_counter][2], metadata=self.play_uri[self.playlist_counter][4], thumb=image_url, subtitles_style=self.style)
         else:
             self.mc.play_media(self.play_uri[self.playlist_counter][0], self.play_uri[self.playlist_counter][2])
 
@@ -755,6 +765,7 @@ class ChromecastPlayer(Gtk.Application):
         if self.cast:
             self.cast.wait()
             self.mc = self.cast.media_controller
+            self.mc.style_subtitles(self.style)
             self.mc.app_id = 'FE51E599'
             time.sleep(0.2)
             try:
